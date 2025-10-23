@@ -1,0 +1,32 @@
+{
+  "intervalQualities": ["minor", "major", "perfect", "diminished", "augmented"],
+  "intervalNumbers": ["2nd", "3rd", "4th", "5th", "6th", "7th", "octave"],
+  "keys": ["C", "G", "D", "A", "E", "B", "F#", "F", "Bb", "Eb", "Ab", "Db"],
+  "modes": ["major", "minor"],
+  "cadenceTypes": ["perfect (V–I)", "plagal (IV–I)", "imperfect (any–V)", "interrupted (V–vi)"],
+  "devices": [
+    ["sequence", "repetition of a motif at higher/lower pitch"],
+    ["ostinato", "repeating a motif many times"],
+    ["inversion", "intervals inverted (up becomes down)"],
+    ["augmentation", "double the original note values"],
+    ["diminution", "halve the original note values"]
+  ],
+  "perf": [
+    ["staccato", "short, detached – adds brightness/energy"],
+    ["tenuto", "held slightly longer – beat emphasis"],
+    ["marcato", "accented, weighty emphasis"],
+    ["accent", "slightly louder to emphasise syncopation"],
+    ["legato", "smooth and connected – lyrical flow"]
+  ],
+  "instruments": {"Bb":["Clarinet in Bb","Trumpet in Bb","Soprano Sax in Bb"],"Eb":["Alto Sax in Eb","Baritone Sax in Eb"],"F":["Horn in F"]},
+  "transposition": {"Bb": -2, "Eb": -9, "F": -7},
+  "excellencePhrases": [
+    "creates a sense of unity",
+    "adds energy and momentum",
+    "centres the harmony around the tonic",
+    "produces a dramatic contrast",
+    "strengthens the cadence/resolution",
+    "increases intensity towards a climax",
+    "clarifies the perceived metre for the listener"
+  ]
+}

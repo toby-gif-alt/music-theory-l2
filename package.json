@@ -1,0 +1,14 @@
+{
+  "name": "as91276-ai-question-generator",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Generates original AS91276-style questions from a mined corpus of past papers.",
+  "scripts": {
+    "build:corpus": "node scripts/build-corpus.mjs",
+    "generate": "node scripts/generate.mjs",
+    "check": "node scripts/check-originality.mjs"
+  },
+  "dependencies": {
+    "pdf-parse": "^1.1.1"
+  }
+}
