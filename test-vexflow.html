@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+  <style>
+    body { background: #0f172a; color: #fff; }
+    .vfwrap { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; overflow:auto; }
+    .vfwrap svg { display:block; }
+  </style>
+</head>
+<body>
+  <h2>VexFlow Test</h2>
+  <div class="vfwrap"><div id="test"></div></div>
+  
+  <script>
+    setTimeout(() => {
+      const VF = window.Vex.Flow;
+      const HJ = VF.Annotation.HorizontalJustify || VF.Annotation.Justify;
+      const VJ = VF.Annotation.VerticalJustify || VF.Annotation.VerticalJustify;
+      
+      function colorRed(obj){
+        if (obj && typeof obj.setStyle === 'function') {
+          obj.setStyle({ fillStyle: 'red', strokeStyle: 'red' });
+        }
+      }
+      
+      const factory = new VF.Factory({ renderer: { elementId: 'test', width: 400, height: 150 }});
+      const score = factory.EasyScore();
+      const system = factory.System();
+      
+      const stave = system.addStave({ voices: [] });
+      stave.addClef('treble').addKeySignature('C').addTimeSignature('4/4');
+      
+      const na = new VF.StaveNote({ keys:['c/4'], duration:'q', clef:'treble' });
+      const nb = new VF.StaveNote({ keys:['d/4'], duration:'q', clef:'treble' });
+      colorRed(na);
+      colorRed(nb);
+      
+      const acc = new VF.Accidental('#');
+      colorRed(acc);
+      nb.addModifier(acc, 0);
+      
+      const ann = new VF.Annotation('1');
+      ann.setFont('Arial', 10);
+      ann.setJustification(HJ.CENTER);
+      ann.setVerticalJustification(VJ.TOP);
+      nb.addModifier(ann, 0);
+      
+      const voice = score.voice([na, nb], {time:'2/4'});
+      system.addStave({ voices:[voice] });
+      factory.draw();
+      
+      console.log('VexFlow rendering successful!');
+    }, 1000);
+  </script>
+</body>
+</html>
