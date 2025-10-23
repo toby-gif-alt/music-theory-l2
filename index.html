@@ -60,15 +60,14 @@
         <h2>Build a pack</h2>
         <label>Topics (choose one or more)</label>
         <select id="topics" multiple size="8">
-          <option value="intervals">Intervals (quality + quantity)</option>
-          <option value="transposition">Transposition (Bb/Eb/F to concert & back)</option>
-          <option value="clefs">Clefs & tessitura / voice type</option>
-          <option value="tonality">Tonality (key + evidence, modulation)</option>
-          <option value="harmony">Harmony (chord symbols, inversions)</option>
-          <option value="cadences">Cadences (ID + bass/7th logic – text)</option>
-          <option value="texture">Texture & contrast (describe → analyse effect)</option>
-          <option value="devices">Compositional devices (define/apply)</option>
-          <option value="perf">Performance markings & articulation</option>
+          <option value="qIntervals">Intervals (quality + quantity)</option>
+          <option value="qTransposition">Transposition (Bb/Eb/F to concert & back)</option>
+          <option value="qTexture">Texture & contrast (describe → analyse effect)</option>
+          <option value="qTonality">Tonality (key + evidence, modulation)</option>
+          <option value="qHarmony">Harmony (chord symbols, inversions)</option>
+          <option value="qCadences">Cadences (ID + bass/7th logic – text)</option>
+          <option value="qDevices">Compositional devices (define/apply)</option>
+          <option value="qPerf">Performance markings & articulation</option>
         </select>
 
         <label>Difficulty mapping</label>
@@ -89,16 +88,6 @@
           <button class="btn" id="print">Print / Save PDF</button>
         </div>
 
-        <div class="qbox small">
-          <div class="flex">
-            <span class="pill">Include model guidance <input type="checkbox" id="explain" checked></span>
-            <span class="pill">Shuffle phrasing <input type="checkbox" id="shuffle" checked></span>
-          </div>
-          <label class="small">Prime from past-paper text (optional)</label>
-          <input type="file" id="textImport" accept=".txt,.csv" />
-          <div class="small muted">Tip: copy text from PDFs into a .txt to auto‑extend term lists. This app does not parse PDFs.</div>
-        </div>
-
         <h2 style="margin-top:16px">Rubric helper</h2>
         <div class="small muted">
           <ul>
@@ -115,455 +104,187 @@
       <div class="pad">
         <h2>Output</h2>
         <div id="out"></div>
-        <div class="right controls" style="margin-top:8px">
-          <button class="btn" id="downloadJson">Download JSON</button>
-          <button class="btn" id="downloadCsv">Download CSV</button>
-        </div>
-        <div class="printable" id="printable" hidden></div>
+        <div id="schedule"></div>
       </div>
     </section>
   </main>
 
   <script type="module">
-    // ---------- Utilities ----------
-    const r = (min,max)=>Math.floor(Math.random()*(max-min+1))+min;
-    const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-    const shuffle = a => a.map(x=>[Math.random(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
-    const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
+// ===== Auto Loader: fetch mined data from /data produced by the Action =====
+const [banks, patterns] = await Promise.all([
+  fetch('data/banks.json').then(r=>r.json()),
+  fetch('data/patterns.json').then(r=>r.json()).catch(()=>({stems:[], verbs:[], rubric:[]}))
+]).catch(err=>{ console.error(err); return [{}, {stems:[],verbs:[],rubric:[]}]; });
 
-    // ---------- Load mined data ----------
-    const [banks, patterns] = await Promise.all([
-      fetch('data/banks.json').then(r=>r.json()),
-      fetch('data/patterns.json').then(r=>r.json())
-    ]);
+// ===== Helpers =====
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
+const DIFF = {
+  A: s=>`Identify / describe: ${s}`,
+  M: s=>`Explain with evidence from the score: ${s}`,
+  E: s=>`Analyse/apply and discuss the effect on the music: ${s}`
+};
 
-    // ---------- Lexicons (from banks.json) ----------
-    const LEX = {
-      intervalsQ: banks.intervalQualities || ['minor','major','perfect','diminished','augmented'],
-      intervalsN: banks.intervalNumbers || ['2nd','3rd','4th','5th','6th','7th','octave'],
-      devices: banks.devices || [
-        ['sequence','repetition of a motif at higher or lower pitch'],
-        ['ostinato','repeating a motif many times'],
-        ['inversion','turning a motif upside down (intervals invert)'],
-        ['augmentation','note values made proportionally longer'],
-        ['diminution','note values made proportionally shorter']
-      ],
-      perf: banks.perf || [
-        ['staccato','short, detached – brightness / energy'],
-        ['tenuto','slightly longer – emphasis on the beat'],
-        ['marcato','short and accented – heavy emphasis'],
-        ['accent','slightly louder – emphasises syncopation'],
-        ['legato','smooth and connected – lyrical flow']
-      ],
-      excellencePhrases: banks.excellencePhrases || [
-        'creates a sense of unity',
-        'adds energy and momentum',
-        'centres the harmony around the tonic',
-        'produces a dramatic contrast',
-        'strengthens the cadence / resolution',
-        'increases intensity towards a climax',
-        'clarifies the perceived metre for the listener'
-      ],
-      keys: banks.keys || ['C','G','D','A','E','B','F#','F','Bb','Eb','Ab','Db'],
-      modes: banks.modes || ['major','minor'],
-      modHints:['brief modulation to the dominant','temporary tonicisation of the relative minor','move to the subdominant area'],
-      chords:['C','G','F','Dm','Em','Am','E7','A7','D7','G/B','C/E','Bb','Eb','F/A'],
-      clefs:['treble','alto','tenor','bass'],
-      voices:[['Soprano','higher tessitura'],['Alto','lower female tessitura'],['Tenor','higher male tessitura'],['Bass','lowest male tessitura']],
-      instruments: banks.instruments || { Bb:['Clarinet in Bb','Trumpet in Bb','Soprano Sax in Bb'], Eb:['Alto Sax in Eb','Baritone Sax in Eb'], F:['Horn in F'] },
-      transpo: banks.transposition || { Bb:-2, Eb:-9, F:-7 } // semitone written->concert
-    };
+// ===== Question Generators (browser) =====
+function qIntervals(level){
+  const items = Array.from({length:6},()=>`${pick(banks.intervalQualities)} ${pick(banks.intervalNumbers)}`);
+  return {topic:'Intervals', stem:`${DIFF[level]('Identify the quality and quantity of the labelled intervals ①–⑥ (e.g., minor 3rd).')} Intervals may include: ${items.join(', ')}.`, model:`Quality + quantity on each; correct for clef.`};
+}
+function qTransposition(level){
+  const fam = pick(Object.keys(banks.instruments));
+  const inst = pick(banks.instruments[fam]);
+  const dir = Math.random()<0.5?'to concert pitch':'to written pitch';
+  const key = `${pick(banks.keys)} ${pick(banks.modes)}`;
+  const ivl = fam==='Bb'? 'a major 2nd' : fam==='Eb'? 'a major 6th' : 'a perfect 5th';
+  return {topic:'Transposition', stem:`${DIFF[level](`Transpose ${dir}: ${inst} part in ${key}. State the transposition interval and ${level==='A'?'direction': level==='M'?'resulting key and direction':'justify key‑signature change and accidentals'}.`)}`, model:`${inst} transposes by ${ivl}. Include correct key signature; keep performance markings.`};
+}
+function qTexture(level){
+  return {topic:'Texture', stem:`${DIFF[level]('Discuss the texture using two specific pieces of evidence (bars/parts).')}`, model:`E.g., monophonic → homophonic; imitative entries; cite bars/parts.`};
+}
+function qTonality(level){
+  const key = `${pick(banks.keys)} ${pick(banks.modes)}`;
+  return {topic:'Tonality', stem:`${DIFF[level](`Identify the key (${key} implied) and provide ${level==='A'?'one':'two'} piece(s) of evidence${level==='E'?'; comment on brief modulation':''}.`)}`, model:`${key}. Evidence: key sig; V or V7→I; opening/closing chords.`};
+}
+function qHarmony(level){
+  return {topic:'Harmony', stem:`${DIFF[level]('Add chord symbols (jazz/rock) for a 4‑bar phrase. Include one inversion.')}`, model:`Derive from bass + upper voices; include at least one inversion; cadential function.`};
+}
+function qCadences(level){
+  const cad = pick(banks.cadenceTypes);
+  return {topic:'Cadences', stem:`${DIFF[level](`Name the cadence (${cad} may occur)${level!=='A'?'; describe/notate bass (and 7th)':''}.`)}`, model:`${cad.split(' ')[0]} cadence; chord tones support label.`};
+}
+function qDevices(level){
+  const [name,def] = pick(banks.devices);
+  return {topic:'Devices', stem:`${DIFF[level](`Define "${name}"${level!=='A'?' and outline a 2–4 bar example':''}.`)}`, model:`${cap(name)} – ${def}.`};
+}
+function qPerf(level){
+  const [name,why] = pick(banks.perf);
+  return {topic:'Performance', stem:`${DIFF[level](`Explain how "${name}" would be played, with score evidence.`)}`, model:`${cap(name)} – ${why}.`};
+}
 
-    function extendFromText(txt){
-      const words = (txt.match(/[A-Za-z#]+/g)||[]).map(x=>x.toLowerCase());
-      const add = (arr,term)=>{ if(!arr.includes(term)) arr.push(term); };
-      ['staccato','legato','marcato','tenuto','ostinato','sequence','augmentation','diminution','syncopation','tessitura'].forEach(t=>{
-        if(words.includes(t)) add(LEX.devices.map(d=>d[0]),t);
-      });
+const GEN = { qIntervals, qTransposition, qTexture, qTonality, qHarmony, qCadences, qDevices, qPerf };
+const TOPIC_KEYS = Object.keys(GEN);
+
+// ===== Evidence/Rubric builder for Assessment Schedule =====
+function scheduleFor(topic){
+  // Light, generic schedule aligned to A/M/E; we enrich with any mined verbs to sound authentic.
+  const extra = (patterns.verbs?.length? pick(patterns.verbs).replace(/\s+/g,' ').slice(0,120) : '');
+  const base = {
+    A: 'Identifies / describes correctly.',
+    M: 'Explains using specific musical evidence (bars/parts/notations).',
+    E: 'Analyses and states the effect on performance/sound; coherent justification.'
+  };
+  const special = {
+    qIntervals: {
+      A:'Names quality/quantity of most intervals.',
+      M:'Names all intervals with workings (semitone count / context).',
+      E:'Relates dissonance/resolution to musical effect.'
+    },
+    qTransposition: {
+      A:'States correct direction/interval.',
+      M:'Gives resulting key & direction with correct key signature.',
+      E:'Justifies signature/accidentals and performance/tessitura impact.'
+    },
+    qTonality: {
+      A:'Names plausible key.',
+      M:'Gives two pieces of evidence (cadence/chords/accidentals).',
+      E:'Comments on brief modulation or tonicisation with chord evidence.'
+    },
+    qHarmony: {
+      A:'Provides mostly correct chord symbols.',
+      M:'Includes inversion(s) and cadential point.',
+      E:'Explains harmonic function (T/S/D) and any secondary dominant.'
+    },
+    qCadences: {
+      A:'Labels cadence type correctly.',
+      M:'Supplies bass/7th as appropriate.',
+      E:'Explains closure/continuation effect and voice‑leading.'
+    },
+    qTexture: {
+      A:'Identifies texture(s).',
+      M:'Explains with two pieces of score evidence.',
+      E:'Links texture to musical character/effect.'
+    },
+    qDevices: {
+      A:'Defines device.',
+      M:'Outlines a valid short example.',
+      E:'Explains the device's impact on expectation/momentum.'
+    },
+    qPerf: {
+      A:'Identifies marking(s).',
+      M:'Explains how to play them with evidence.',
+      E:'Analyses effect on listener/ensemble balance.'
     }
+  };
+  const sp = special[topic]||{};
+  return {
+    A: sp.A || base.A,
+    M: sp.M || base.M,
+    E: sp.E || base.E,
+    flavour: extra
+  };
+}
 
-    // ---------- Difficulty prompts ----------
-    const DIFF = {
-      A: {
-        ask:(s)=>`Identify / describe: ${s}`,
-        tail:'(Achievement: name/describe correctly)'
-      },
-      M: {
-        ask:(s)=>`Explain with evidence from the score: ${s}`,
-        tail:'(Merit: include specific evidence – bar numbers, symbols, notes)'
-      },
-      E: {
-        ask:(s)=>`Analyse / apply and discuss the effect on the music: ${s}`,
-        tail:'(Excellence: include effect on performance/sound and supported evidence)'
-      }
-    };
-
-    // ---------- Generators ----------
-    function gIntervals(level){
-      const items = Array.from({length:6},()=>`${pick(LEX.intervalsQ)} ${pick(LEX.intervalsN)}`);
-      const stem = `${DIFF[level].ask('Identify the quality and quantity of the labelled intervals ①–⑥ (e.g., minor 3rd).')}
-Intervals to identify: ${items.join(', ')}.`;
-      const ans = `Model guidance:
-• Quality + quantity for each (allow specific clef awareness).
-• ${level!=='A'?'Include workings: semitone count / key context.
-':''}${level==='E'?`Discuss effect where relevant (e.g., dissonance → resolution) and link to cadence or contour; ${pick(LEX.excellencePhrases)}.`:''}`;
-      return {stem,answer:ans};
-    }
-
-    function gTransposition(level){
-      const fam = pick(Object.keys(LEX.instruments));
-      const inst = pick(LEX.instruments[fam]);
-      const dir = Math.random()<0.5?'to concert pitch':'to written pitch for the instrument';
-      const key = `${pick(LEX.keys)} ${pick(LEX.modes)}`;
-      const ivl = fam==='Bb'?'a major 2nd':fam==='Eb'?'a major 6th':'a perfect 5th';
-      const stem = `${DIFF[level].ask(`Transpose ${dir}: ${inst} part notated in ${key}. State the transposition interval and ${level==='A'?'resulting direction':level==='M'?'resulting key and direction':'justify effect on sounding pitch, including key signature change and accidentals'}.`)}`;
-      const ans = `Model: ${inst} transposes by ${ivl}. ${dir.includes('concert')?'Written → concert':'Concert → written'}: ${ivl} ${fam==='Bb'?'down':'up'} in sounding terms depending on context. Include correct key signature and carry performance markings.${level==='E'?` Explain how this affects ensemble balance or tessitura; ${pick(LEX.excellencePhrases)}.`:''}`;
-      return {stem,answer:ans};
-    }
-
-    function gClefs(level){
-      const clef = pick(LEX.clefs);
-      const [voice,why] = pick(LEX.voices);
-      const stem = `${DIFF[level].ask(`Determine the most appropriate ${clef} clef voice/instrument choice and justify the selection (tessitura / range / part writing).`)}`;
-      const ans = `Model: ${voice} – suits ${why}. ${level!=='A'?'Reference range landmarks for the clef and typical comfortable pitches.
-':''}${level==='E'?'Discuss effect on readability / performer accuracy and ensemble balance.':''}`;
-      return {stem,answer:ans};
-    }
-
-    function gTonality(level){
-      const key = `${pick(LEX.keys)} ${pick(LEX.modes)}`;
-      const stem = `${DIFF[level].ask(`Identify the key (${key} given or implied) and provide ${level==='A'?'one':'two'} piece(s) of evidence. ${level==='E'?'If applicable, comment on modulation.' : ' '}')}`;
-      const ans = `Model: Key ${key}. Evidence: key signature, opening/closing chords, presence of V or V7 → I cadence. ${level!=='A'?'Include bar refs and spelled chord tones.
-':''}${level==='E'?`Briefly note ${pick(LEX.modHints)} with chord evidence; ${pick(LEX.excellencePhrases)}.`:''}`;
-      return {stem,answer:ans};
-    }
-
-    function gHarmony(level){
-      const bars = r(2,4);
-      const pool = shuffle(LEX.chords).slice(0,bars*2);
-      const stem = `${DIFF[level].ask(`Add chord symbols (jazz/rock notation) for ${bars} bar(s). Include inversions where relevant (e.g., G/B).`)}`;
-      const ans = `Model approach: derive chords from bass + upper voices; identify cadential points; show at least one inversion. Example pool: ${pool.join(', ')}.${level==='E'?` Explain harmonic function (tonic/dominant/subdominant), and any secondary dominant or passing 6/4; ${pick(LEX.excellencePhrases)}.`:''}`;
-      return {stem,answer:ans};
-    }
-
-    function gCadences(level){
-      const types = ['perfect (V–I)','plagal (IV–I)','imperfect (any–V)','interrupted (V–vi)'];
-      const cad = pick(types);
-      const stem = `${DIFF[level].ask(`Name the cadence (${cad} may occur). ${level!=='A'?'Notate bass notes / 7th where appropriate (describe textually).':''}`)}`;
-      const ans = `Model: ${cad.split(' ')[0]} cadence. Evidence: roman numerals and chord tones. ${level==='E'?'Discuss effect (closure vs continuation) and voice‑leading (leading tone → tonic, 7th resolution).':''}`;
-      return {stem,answer:ans};
-    }
-
-    function gTexture(level){
-      const feats = ['monophonic opening expanding to homophony','imitative entries creating polyphony','rhythmic unison vs independent lines'];
-      const stem = `${DIFF[level].ask(`Discuss texture using evidence (you may reference bars/parts).`)}`;
-      const ans = `Model: ${pick(feats)}; link to parts and bars. ${level!=='A'?'Include at least two pieces of specific evidence.
-':''}${level==='E'?`State the effect on listener (e.g., drive/clarity/contrast), and performance implications; ${pick(LEX.excellencePhrases)}.`:''}`;
-      return {stem,answer:ans};
-    }
-
-    function gDevices(level){
-      const [name,def] = pick(LEX.devices);
-      const stem = `${DIFF[level].ask(`Define the compositional device “${name}”. ${level!=='A'?'Give a short 2–4 bar textual example or description of how you would use it.':''} `)}`;
-      const ans = `Model: ${cap(name)} – ${def}. ${level==='E'?'Explain how using this device shapes momentum/expectation; include bar‑length and note‑value change where relevant.':''}`;
-      return {stem,answer:ans};
-    }
-
-    function gPerf(level){
-      const [name,why] = pick(LEX.perf);
-      const stem = `${DIFF[level].ask(`Explain how the performance marking “${name}” would be played, using evidence (stave/beat).`)}`;
-      const ans = `Model: ${cap(name)} – ${why}. Technique note and where it appears. ${level==='E'?'Discuss the resulting character/feel and interaction with rhythm/dynamics.':''}`;
-      return {stem,answer:ans};
-    }
-
-    const generators = {
-      intervals:gIntervals, transposition:gTransposition, clefs:gClefs, tonality:gTonality,
-      harmony:gHarmony, cadences:gCadences, texture:gTexture, devices:gDevices, perf:gPerf
-    };
-
-    // ---------- UI ----------
-    const out = document.getElementById('out');
-    const printable = document.getElementById('printable');
-
-    function renderQ(q,i){
-      const explain = document.getElementById('explain').checked;
-      const el = document.createElement('div');
-      el.className='qbox';
-      el.innerHTML = `<h3>Q${i+1}</h3><div class="mono">${q.stem.replace(/\n/g,'<br>')}</div>` + (explain?`<div class="answer"><strong>Model guidance</strong>
-${q.answer}</div>`:'');
-      out.appendChild(el);
-    }
-
-    function buildPack(){
-      const selected = Array.from(document.getElementById('topics').selectedOptions).map(o=>o.value);
-      const topics = selected.length?selected:Object.keys(generators);
-      const level = document.getElementById('difficulty').value;
-      let n = Math.min(Math.max(parseInt(document.getElementById('qty').value)||10,1),50);
-      const shuffleOn = document.getElementById('shuffle').checked;
-
-      const qs = [];
-      for(let i=0;i<n;i++){
-        const t = pick(topics);
-        qs.push({topic:t,...generators[t](level)});
-      }
-      if(shuffleOn) qs.sort(()=>Math.random()-0.5);
-
-      out.innerHTML='';
-      qs.forEach((q,i)=>renderQ(q,i));
-
-      printable.hidden=false;
-      printable.innerHTML = `<h2>AS91276 – ${topics.length>1?'Mixed topics':topics.map(cap).join(', ')} (${level})</h2>` +
-        qs.map((q,i)=>`<h3>${i+1}. [${cap(q.topic)}]</h3><div class="mono">${q.stem.replace(/\n/g,'<br>')}</div>`).join('');
-
-      return qs;
-    }
-
-    document.getElementById('gen').addEventListener('click', buildPack);
-    document.getElementById('clear').addEventListener('click', ()=>{ out.innerHTML=''; printable.innerHTML=''; printable.hidden=true; });
-    document.getElementById('print').addEventListener('click', ()=>window.print());
-
-    // Downloads
-    function download(filename, text){
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));
-      a.download=filename; a.click(); URL.revokeObjectURL(a.href);
-    }
-    document.getElementById('downloadJson').addEventListener('click',()=>{
-      const qs = Array.from(out.querySelectorAll('.qbox')).map((el,i)=>({
-        number:i+1,
-        question: el.querySelector('.mono').innerText,
-        model: (el.querySelector('.answer')||{}).innerText||''
-      }));
-      download('as91276_pack.json', JSON.stringify(qs,null,2));
-    });
-    document.getElementById('downloadCsv').addEventListener('click',()=>{
-      const rows = [['Number','Question','Model']];
-      Array.from(out.querySelectorAll('.qbox')).forEach((el,i)=>{
-        const q = el.querySelector('.mono').innerText.replace(/\n/g,' ');
-        const m = (el.querySelector('.answer')||{}).innerText||'';
-        rows.push([i+1, '"'+q.replace(/"/g,'""')+'"', '"'+m.replace(/"/g,'""')+'"']);
-      });
-      download('as91276_pack.csv', rows.map(r=>r.join(',')).join('\n'));
-    });
-
-    // Import text to extend lexicon
-    document.getElementById('textImport').addEventListener('change', async (e)=>{
-      const f=e.target.files[0]; if(!f) return; const txt=await f.text(); extendFromText(txt); alert('Imported keywords (basic). Your generator has been primed.');
-    });
-  </script>
-
-  <!-- ===== AS91276 Browser Generator Patch (drop in before </body>) ===== -->
-<section id="pastePanel" style="max-width:1100px;margin:20px auto;padding:12px;border:1px solid #334155;border-radius:12px;background:#0b1224;color:#e5e7eb;font-family:ui-sans-serif,system-ui">
-  <h3 style="margin:6px 0 8px 0;font-size:1rem">Prime with exam text (optional)</h3>
-  <p style="margin:0 0 8px 0;color:#94a3b8;font-size:.9rem">
-    Open a PDF, copy the page text, paste below, then click <em>Learn from text</em>. This extends the phrase/device banks for generation (offline).
-  </p>
-  <textarea id="pasteText" placeholder="Paste text from your past papers/schedules here…" style="width:100%;min-height:160px;padding:10px;border:1px solid #374151;border-radius:10px;background:#0b1224;color:#e5e7eb"></textarea>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-    <button id="learnFromText" style="padding:8px 12px;border:1px solid #334155;border-radius:10px;background:linear-gradient(180deg,#101a33,#0e162c);color:#e5e7eb;cursor:pointer">Learn from text</button>
-    <span id="learnMsg" style="color:#94a3b8;font-size:.9rem"></span>
-  </div>
-</section>
-
-<script>
-(function(){
-  // Wait for DOM
-  const onReady = (fn)=> (document.readyState === 'loading')
-    ? document.addEventListener('DOMContentLoaded', fn)
-    : fn();
-
-  onReady(()=>{
-
-    // --- Small status helper ---
-    function say(msg){
-      let s=document.getElementById('status');
-      if(!s){
-        s=document.createElement('div');
-        s.id='status';
-        s.style.cssText='position:sticky;top:56px;z-index:50;max-width:1100px;margin:8px auto;padding:8px 12px;border-radius:10px;border:1px solid #334155;background:#0b1224;color:#cbd5e1';
-        document.body.prepend(s);
-      }
-      s.textContent=msg; s.style.display='block'; clearTimeout(s._t);
-      s._t=setTimeout(()=>s.style.display='none',2500);
-    }
-
-    // --- Minimal banks (extendable via learning) ---
-    const BANKS = window.AS91276_BANKS || {
-      intervalQualities:["minor","major","perfect","diminished","augmented"],
-      intervalNumbers:["2nd","3rd","4th","5th","6th","7th","octave"],
-      keys:["C","G","D","A","E","B","F#","F","Bb","Eb","Ab","Db"],
-      modes:["major","minor"],
-      cadenceTypes:["perfect (V–I)","plagal (IV–I)","imperfect (any–V)","interrupted (V–vi)"],
-      devices:[["sequence","repetition of a motif higher/lower"],["ostinato","repeated motif"],["inversion","intervals inverted"],["augmentation","note values lengthened"],["diminution","note values shortened"]],
-      perf:[["staccato","short/detached"],["tenuto","held slightly longer"],["marcato","accented"],["accent","emphasised"],["legato","smooth/connected"]],
-      instruments:{ Bb:["Clarinet in Bb","Trumpet in Bb","Soprano Sax in Bb"], Eb:["Alto Sax in Eb","Baritone Sax in Eb"], F:["Horn in F"] },
-      excellencePhrases:[
-        "creates a sense of unity","adds energy and momentum","centres the harmony around the tonic",
-        "produces a dramatic contrast","strengthens the cadence/resolution",
-        "increases intensity towards a climax","clarifies the perceived metre for the listener"
-      ]
-    };
-    window.AS91276_BANKS = BANKS;
-
-    // --- Pattern store learned from pasted text ---
-    const PATTERNS = { stems:[], verbs:[] };
-
-    // --- Tiny helpers ---
-    const pick = a => a[Math.floor(Math.random()*a.length)];
-    const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
-    const DIFF = {
-      A: s=>`Identify/describe: ${s}`,
-      M: s=>`Explain with evidence: ${s}`,
-      E: s=>`Analyse/apply and discuss the effect: ${s}`
-    };
-
-    // --- Learn from pasted text (very light mining) ---
-    function learnFrom(text){
-      const t = (text||'').replace(/\r/g,'\n').replace(/\u00a0/g,' ');
-      const lines = t.split('\n').map(s=>s.trim()).filter(Boolean);
-
-      // Grab task-like stems & phrasing verbs
-      const stemRe = /^(Identify|Describe|Explain|Discuss|Analyse|Transcribe|Transpose|Add|Annotate|Name|Notate)\b/i;
-      const markRe = /(evidence|effect|cadence|key signature|interval|texture|transposition|tablature|reduction|modulation|harmony|chord)/i;
-      const phraseRe = /(creates a sense|adds .* momentum|contrast|unity|closure|drive|energy|tension|resolution)/i;
-
-      const newStems = [];
-      const newVerbs = [];
-
-      for(const ln of lines){
-        if(ln.length>30 && stemRe.test(ln) && markRe.test(ln)) newStems.push(ln);
-        if(phraseRe.test(ln)) newVerbs.push(ln);
-      }
-
-      // Extend banks/devices/perf if terms found
-      const words = t.toLowerCase();
-      const addDevice = (name,def)=>{ if(!BANKS.devices.find(d=>d[0]===name)) BANKS.devices.push([name,def]); };
-      if(words.includes('syncopation')) addDevice('syncopation','accent on normally weak/off beats');
-      if(words.includes('pedal')) addDevice('pedal point','sustained/repeated note under changing harmonies');
-
-      PATTERNS.stems = Array.from(new Set(PATTERNS.stems.concat(newStems))).slice(0,500);
-      PATTERNS.verbs = Array.from(new Set(PATTERNS.verbs.concat(newVerbs))).slice(0,200);
-
-      // Nudge excellence phrases with any learned verbs (trim long sentences)
-      PATTERNS.verbs.slice(0,5).forEach(v=>{
-        const p = v.replace(/\.$/,'').slice(0,120);
-        if(!BANKS.excellencePhrases.includes(p)) BANKS.excellencePhrases.push(p);
-      });
-
-      return { stems: newStems.length, verbs: newVerbs.length };
-    }
-
-    // --- Generators (use learned phrases when available) ---
-    function genIntervals(level){
-      const items = Array.from({length:6},()=>`${pick(BANKS.intervalQualities)} ${pick(BANKS.intervalNumbers)}`);
-      const ex = pick(BANKS.excellencePhrases);
-      return {topic:'intervals',
-        stem:`${DIFF[level]('Identify the quality and quantity of the labelled intervals ①–⑥ (e.g., minor 3rd).')} Intervals may include: ${items.join(', ')}.`,
-        model:`Model: quality + quantity on each; match clef/context.${level==='E'?' Effect: dissonance → resolution; '+ex+'.':''}`};
-    }
-    function genTransposition(level){
-      const fam=pick(Object.keys(BANKS.instruments)), inst=pick(BANKS.instruments[fam]);
-      const dir=Math.random()<0.5?'to concert pitch':'to written pitch';
-      const key=`${pick(BANKS.keys)} ${pick(BANKS.modes)}`;
-      const ivl=fam==='Bb'?'a major 2nd':fam==='Eb'?'a major 6th':'a perfect 5th';
-      const ex = pick(BANKS.excellencePhrases);
-      return {topic:'transposition',
-        stem:`${DIFF[level](`Transpose ${dir}: ${inst} part in ${key}. State the transposition interval and ${level==='A'?'direction':level==='M'?'resulting key and direction':'justify key-signature change and accidentals'}.`)}`,
-        model:`Model: ${inst} transposes by ${ivl}. Include correct key signature; carry performance markings.${level==='E'?' Comment on tessitura/ensemble balance; '+ex+'.':''}`};
-    }
-    function genTexture(level){
-      const ex = pick(BANKS.excellencePhrases);
-      return {topic:'texture',
-        stem:`${DIFF[level]('Discuss the texture using two specific pieces of evidence (bars/parts).')}`,
-        model:`Model: e.g., monophonic → homophonic; imitative entries; cite bars/parts.${level==='E'?' State the effect on drive/contrast; '+ex+'.':''}`};
-    }
-    function genTonality(level){
-      const key=`${pick(BANKS.keys)} ${pick(BANKS.modes)}`;
-      const ex = pick(BANKS.excellencePhrases);
-      return {topic:'tonality',
-        stem:`${DIFF[level](`Identify the key (${key} implied) and provide ${level==='A'?'one':'two'} piece(s) of evidence${level==='E'?'; comment on brief modulation':''}.`)}`,
-        model:`Model: ${key}. Evidence: key signature; V or V7→I; opening/closing chords.${level==='E'?' '+ex+'.':''}`};
-    }
-    function genCadences(level){
-      const cad=pick(BANKS.cadenceTypes);
-      return {topic:'cadences',
-        stem:`${DIFF[level](`Name the cadence (${cad} may occur)${level!=='A'?'; describe/notate bass notes (and 7th)':''}.`)}`,
-        model:`Model: ${cad.split(' ')[0]} cadence; chord tones support the label.`};
-    }
-    function genHarmony(level){
-      const ex = pick(BANKS.excellencePhrases);
-      return {topic:'harmony',
-        stem:`${DIFF[level]('Add chord symbols (jazz/rock) for a 4-bar phrase. Include one inversion.')}`,
-        model:`Model: derive from bass + upper voices; at least one inversion; cadential function.${level==='E'?' '+ex+'.':''}`};
-    }
-    function genDevices(level){
-      const [name,def]=pick(BANKS.devices);
-      const ex = pick(BANKS.excellencePhrases);
-      return {topic:'devices',
-        stem:`${DIFF[level](`Define "${name}"${level!=='A'?' and outline a 2–4 bar example':''}.`)}`,
-        model:`Model: ${cap(name)} – ${def}.${level==='E'?' Impact on expectation/momentum; '+ex+'.':''}`};
-    }
-    function genPerf(level){
-      const [name,why]=pick(BANKS.perf);
-      return {topic:'perf',
-        stem:`${DIFF[level](`Explain how "${name}" would be played, with score evidence.`)}`,
-        model:`Model: ${cap(name)} – ${why}.`};
-    }
-    const GEN = {intervals:genIntervals, transposition:genTransposition, texture:genTexture, tonality:genTonality, cadences:genCadences, harmony:genHarmony, devices:genDevices, perf:genPerf};
-
-    // --- UI wiring (failsafe) ---
-    const $ = id => document.getElementById(id);
-    const out = $('out') || (function(){const d=document.createElement('div'); d.id='out'; document.body.appendChild(d); return d;})();
-    const printable = $('printable') || (function(){const d=document.createElement('div'); d.id='printable'; d.hidden=true; document.body.appendChild(d); return d;})();
-    const btnGen = $('gen'), btnClear=$('clear'), btnPrint=$('print'), btnJson=$('downloadJson'), btnCsv=$('downloadCsv');
-
-    function renderQ(q,i){
-      const explain = $('explain')?.checked ?? true;
-      const el = document.createElement('div');
-      el.className='qbox';
-      el.innerHTML = `<h3>Q${i+1} [${cap(q.topic)}]</h3><div class="mono">${q.stem}</div>` + (explain?`<div class="answer"><strong>Model guidance</strong>\n${q.model}</div>`:'');
-      out.appendChild(el);
-    }
-    function buildPack(){
-      const tSel = $('topics');
-      const chosen = tSel ? Array.from(tSel.selectedOptions).map(o=>o.value) : [];
-      const use = chosen.length ? chosen : Object.keys(GEN);
-      const level = ( $('difficulty')?.value || 'A' ).toUpperCase();
-      let n = Math.min(Math.max(parseInt($('qty')?.value) || 10, 1), 50);
-      const qs=[];
-      for(let i=0;i<n;i++){ const t=pick(use); qs.push({number:i+1, ...GEN[t](level)}); }
-      out.innerHTML=''; qs.forEach(renderQ);
-      printable.hidden=false;
-      printable.innerHTML = `<h2>AS91276 – ${use.length>1?'Mixed topics':cap(use[0])} (${level})</h2>` + qs.map((q,i)=>`<h3>${i+1}. [${cap(q.topic)}]</h3><div class="mono">${q.stem}</div>`).join('');
-      window._lastQs = qs; say('Generated '+qs.length+' question(s).');
-      return qs;
-    }
-
-    btnGen && btnGen.addEventListener('click', buildPack);
-    btnClear && btnClear.addEventListener('click', ()=>{ out.innerHTML=''; printable.innerHTML=''; printable.hidden=true; window._lastQs=null; say('Cleared.'); });
-    btnPrint && btnPrint.addEventListener('click', ()=>{ try{ window.print(); }catch(e){ say('Print blocked. Use Download JSON/CSV.'); } });
-
-    function download(name, text, mime){
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(new Blob([text],{type:mime||'text/plain'}));
-      a.download=name; a.click(); URL.revokeObjectURL(a.href);
-    }
-    btnJson && btnJson.addEventListener('click', ()=>{ const qs = window._lastQs || buildPack(); download('as91276_pack.json', JSON.stringify(qs,null,2), 'application/json'); });
-    btnCsv && btnCsv.addEventListener('click', ()=>{ const qs = window._lastQs || buildPack(); const rows = [['Number','Topic','Question','Model'], ...qs.map(q=>[q.number,q.topic,q.stem,q.model])]; const csv = rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n'); download('as91276_pack.csv', csv, 'text/csv'); });
-
-    // Learn button
-    const learnBtn = $('learnFromText'), learnMsg = $('learnMsg');
-    learnBtn && learnBtn.addEventListener('click', ()=>{
-      const txt = $('pasteText')?.value || '';
-      const {stems, verbs} = learnFrom(txt);
-      learnMsg.textContent = `Learned ${stems} task stems, ${verbs} phrasing cues.`;
-      say('Banks extended from pasted text.');
-    });
-
-    say('Ready. Paste exam text (optional), click "Learn from text", then Generate.');
+// ===== Renderers =====
+function el(id){ return document.getElementById(id); }
+function renderExam(qs){
+  const out = el('out');
+  out.innerHTML = '';
+  qs.forEach((q,i)=>{
+    const div = document.createElement('div');
+    div.className = 'qbox';
+    div.innerHTML = `<h3>Q${i+1} [${q.topic}]</h3><div class="mono">${q.stem}</div>`;
+    out.appendChild(div);
   });
-})();
+}
+function renderSchedule(qs){
+  const sched = el('schedule');
+  sched.innerHTML='';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `<h2>Assessment Schedule</h2>`;
+  qs.forEach((q,i)=>{
+    const s = scheduleFor(q._key);
+    const sec = document.createElement('div');
+    sec.className='qbox';
+    sec.innerHTML = `
+      <h3>Q${i+1} [${q.topic}]</h3>
+      <div class="small"><em>Authenticity flavour:</em> ${s.flavour||'—'}</div>
+      <ul>
+        <li><strong>Achievement:</strong> ${s.A}</li>
+        <li><strong>Merit:</strong> ${s.M}</li>
+        <li><strong>Excellence:</strong> ${s.E}</li>
+      </ul>`;
+    sched.appendChild(sec);
+  });
+}
+
+// ===== Main button wiring =====
+function buildPack(){
+  const topicsSel = el('topics');
+  const chosen = topicsSel ? Array.from(topicsSel.selectedOptions).map(o=>o.value) : [];
+  const keys = chosen.length ? chosen : TOPIC_KEYS;
+  const level = (el('difficulty')?.value || 'A').toUpperCase();
+  const n = Math.min(Math.max(parseInt(el('qty')?.value)||10,1),50);
+  const qs = [];
+  for(let i=0;i<n;i++){
+    const k = pick(keys);
+    const fn = GEN[k];
+    const q = fn(level);
+    q._key = k;
+    qs.push(q);
+  }
+  renderExam(qs);
+  renderSchedule(qs);
+  window._lastQs = qs;
+}
+
+el('gen')?.addEventListener('click', buildPack);
+el('clear')?.addEventListener('click', ()=>{ el('out').innerHTML=''; el('schedule').innerHTML=''; window._lastQs=null; });
+el('print')?.addEventListener('click', ()=>window.print());
+
+// Auto-generate one pack on load for instant UX
+buildPack();
 </script>
-<!-- ===== /AS91276 Browser Generator Patch ===== -->
+
+<!-- Tip: ensure you have containers with ids: out, schedule, and the controls (gen/clear/print, qty, topics, difficulty). Remove any "paste" UI. -->
 </body>
 </html>
