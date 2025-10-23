@@ -208,88 +208,107 @@ document.addEventListener('DOMContentLoaded', async () => {
     const midi  = base + semi;
     const outOct = Math.floor(midi/12);
     const pcs = {c:0,"c#":1,d:2,"d#":3,e:4,f:5,"f#":6,g:7,"g#":8,a:9,"a#":10,b:11};
-    let outName = "c";
-    for (const k in pcs){ if (pcs[k] === (midi % 12 + 12) % 12) { outName = k; break; } }
-    const acc = outName.indexOf("#") >= 0 ? "#" : null;
-    const baseLetter = outName.replace("#",""); 
-    return { key: baseLetter + "/" + outOct, acc };
+    let name = "c";
+    for (const k in pcs){ if (pcs[k] === ((midi%12)+12)%12) { name = k; break; } }
+    const acc = name.indexOf("#")>=0 ? "#" : null;
+    return { letter: name.replace("#","").toUpperCase(), acc, oct: outOct };
+  }
+  function toEasyToken(obj, dur){ // e.g. {letter:'C', acc:'#', oct:4} -> "C#4/8"
+    const acc = obj.acc ? obj.acc : "";
+    return obj.letter + acc + obj.oct + "/" + dur;
   }
 
   // --- Engraving builders (no nested backticks) ---
+  // A) Intervals: 6 labelled pairs = 12 eighths -> 12/8
   function engraveIntervals(containerId){
-    const factory = vfFactory(containerId);
-    const keySig = pick(banks.keys || ["C"]);
-    const res = drawSystem(factory, {clef:"treble", keySig:keySig, timeSig:"4/4"});
-    const score = res.score, system = res.system;
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+
+    const keySig = (banks.keys && banks.keys[Math.floor(Math.random()*banks.keys.length)]) || "C";
+    const stave  = system.addStave({ voices: [] });
+    stave.addClef("treble").addKeySignature(keySig).addTimeSignature("12/8");
 
     const q = banks.intervalQualities || ["minor","major","perfect","diminished","augmented"];
     const n = banks.intervalNumbers  || ["2nd","3rd","4th","5th","6th","7th","octave"];
-    const semis = {"2nd":2,"3rd":4,"4th":5,"5th":7,"6th":9,"7th":11,"octave":12};
+    const semis = { "2nd":2,"3rd":4,"4th":5,"5th":7,"6th":9,"7th":11,"octave":12 };
 
-    const notes = [];
-    for (let i = 1; i <= 6; i++){
-      const a = randNoteTreble();
-      const quality = pick(q);
-      const number  = pick(n);
-      const step    = semis[number] || 7;
-      const adjust  = (quality === "minor") ? -1 : (quality === "augmented") ? 1 : (quality === "diminished") ? -1 : 0;
-      const semi    = (Math.random() < 0.5 ? -1 : 1) * (step + adjust);
-      const to      = semitoneOffset(a, semi);
+    const tokens = []; // 12 tokens, each "C4/8" etc.
+    for(let i=1;i<=6;i++){
+      const aKey = randNoteTreble(); // like "c/4"
+      const quality = q[Math.floor(Math.random()*q.length)];
+      const number  = n[Math.floor(Math.random()*n.length)];
+      const step = semis[number] || 7;
+      const adjust = (quality==="minor")? -1 : (quality==="augmented")? +1 : (quality==="diminished")? -1 : 0;
+      const semi = (Math.random()<0.5 ? -1 : 1) * (step + adjust);
 
-      const na = new VF.StaveNote({ keys:[a],         duration:"8", clef:"treble" });
-      const nb = new VF.StaveNote({ keys:[to.key],    duration:"8", clef:"treble" });
-      colorRed(na);
-      colorRed(nb);
-      
-      if (to.acc) {
-        const acc = new VF.Accidental(to.acc);
-        colorRed(acc);
-        nb.addModifier(acc, 0);
-      }
-      
-      const ann = new VF.Annotation(String(i));
-      ann.setFont("Arial", 10);
-      ann.setJustification(HJ.CENTER);
-      ann.setVerticalJustification(VJ.TOP);
-      nb.addModifier(ann, 0);
-      notes.push(na, nb);
+      const top = semitoneOffset(aKey, semi);           // {letter:"C", acc:"#", oct:4}
+      const aTok = aKey.toUpperCase().replace("/", "")  // "C4"
+                      .replace("C#","C#").replace("D#","D#"); // no-op, keep ASCII
+      tokens.push(aTok + "/8", toEasyToken(top, 8));
     }
-    const voice = score.voice(notes, {time:"12/4"});
-    system.addStave({ voices:[voice] });
-    factory.draw();
-  }
 
-  function engraveTransposition(containerId){
-    const factory = vfFactory(containerId);
-    const keySig = pick(banks.keys || ["C"]);
-    const res = drawSystem(factory, {clef:"treble", keySig:keySig, timeSig:"4/4"});
-    const score = res.score, system = res.system;
-    const pool = ["c/4","d/4","e/4","f/4","g/4","a/4","b/4","c/5"];
-    const seq = Array.from({length:8}, () => pick(pool))
-      .map(k => {
-        const note = new VF.StaveNote({ keys:[k], duration:"8", clef:"treble" });
-        colorRed(note);
-        return note;
-      });
-    const voice = score.voice(seq, {time:"4/4"});
-    system.addStave({ voices:[voice] });
-    factory.draw();
-  }
-
-  function engraveTonality(containerId){
-    const factory = vfFactory(containerId, {width:640, height:170});
-    const keySig = pick(banks.keys || ["C"]);
-    const res = drawSystem(factory, {clef:"treble", keySig:keySig, timeSig:"4/4"});
-    const score = res.score, system = res.system;
-    const bar1 = ["c/4","d/4","e/4","f/4","g/4","a/4","b/4","c/5"];
-    const bar2 = ["e/5","d/5","c/5","b/4","a/4","g/4","f/4","e/4"];
-    const seq = bar1.concat(bar2).map(k => {
-      const note = new VF.StaveNote({ keys:[k], duration:"8", clef:"treble" });
-      colorRed(note);
-      return note;
+    const notes = score.notes(tokens.join(", ")); // returns StaveNotes[]
+    // Color notes & add annotations to every second note (2,4,6,8,10,12)
+    notes.forEach((staveNote, idx) => {
+      colorRed(staveNote);
+      if ((idx % 2) === 1) {
+        const ann = new VF.Annotation(String((idx+1)/2));
+        ann.setFont("Arial", 10);
+        ann.setJustification(HJ.CENTER);
+        ann.setVerticalJustification(VJ.TOP);
+        staveNote.addModifier(ann, 0);
+      }
     });
-    const voice = score.voice(seq, {time:"8/4"});
+
+    // Beam consecutive eighths for nicer layout
+    const beams = score.beam(notes);
+    const voice = score.voice(notes, { time:"12/8" });
     system.addStave({ voices:[voice] });
+    beams.forEach(b => colorRed(b)); // beam color
+    factory.draw();
+  }
+
+  // B) Transposition: 8 eighths -> 4/4
+  function engraveTransposition(containerId){
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+
+    const keySig = (banks.keys && banks.keys[Math.floor(Math.random()*banks.keys.length)]) || "C";
+    const stave  = system.addStave({ voices: [] });
+    stave.addClef("treble").addKeySignature(keySig).addTimeSignature("4/4");
+
+    const pool = ["C4/8","D4/8","E4/8","F4/8","G4/8","A4/8","B4/8","C5/8"];
+    const tokens = Array.from({length:8}, ()=> pool[Math.floor(Math.random()*pool.length)]).join(", ");
+    const notes = score.notes(tokens);
+    notes.forEach(colorRed);
+    const beams = score.beam(notes);
+    const voice = score.voice(notes, { time:"4/4" });
+    system.addStave({ voices:[voice] });
+    beams.forEach(b => colorRed(b));
+    factory.draw();
+  }
+
+  // C) Tonality: 16 eighths -> 8/4
+  function engraveTonality(containerId){
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 640, height: 180 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+
+    const keySig = (banks.keys && banks.keys[Math.floor(Math.random()*banks.keys.length)]) || "C";
+    const stave  = system.addStave({ voices: [] });
+    stave.addClef("treble").addKeySignature(keySig).addTimeSignature("8/4");
+
+    const bar1 = ["C4/8","D4/8","E4/8","F4/8","G4/8","A4/8","B4/8","C5/8"];
+    const bar2 = ["E5/8","D5/8","C5/8","B4/8","A4/8","G4/8","F4/8","E4/8"];
+    const tokens = bar1.concat(bar2).join(", ");
+    const notes = score.notes(tokens);
+    notes.forEach(colorRed);
+    const beams = score.beam(notes);
+    const voice = score.voice(notes, { time:"8/4" });
+    system.addStave({ voices:[voice] });
+    beams.forEach(b => colorRed(b));
     factory.draw();
   }
 
