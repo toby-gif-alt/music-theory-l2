@@ -209,8 +209,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const outOct = Math.floor(midi/12);
     const pcs = {c:0,"c#":1,d:2,"d#":3,e:4,f:5,"f#":6,g:7,"g#":8,a:9,"a#":10,b:11};
     let name = "c";
-    for (const k in pcs){ if (pcs[k] === ((midi%12)+12)%12) { name = k; break; } }
-    const acc = name.indexOf("#")>=0 ? "#" : null;
+    for (const k in pcs){ if (pcs[k] === (midi % 12 + 12) % 12) { name = k; break; } }
+    const acc = name.indexOf("#") >= 0 ? "#" : null;
     return { letter: name.replace("#","").toUpperCase(), acc, oct: outOct };
   }
   function toEasyToken(obj, dur){ // e.g. {letter:'C', acc:'#', oct:4} -> "C#4/8"
@@ -244,7 +244,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const top = semitoneOffset(aKey, semi);           // {letter:"C", acc:"#", oct:4}
       const aTok = aKey.toUpperCase().replace("/", "")  // "C4"
-                      .replace("C#","C#").replace("D#","D#"); // no-op, keep ASCII
       tokens.push(aTok + "/8", toEasyToken(top, 8));
     }
 
