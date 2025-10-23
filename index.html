@@ -118,8 +118,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // --- Sanity check: test VexFlow rendering (comment out after verification) ---
-  // Uncomment to verify VexFlow loads and renders correctly:
+  // --- Sanity check: test VexFlow rendering ---
+  // This test is currently ACTIVE. Comment out the entire try/catch block after verification.
   
   try {
     const testDiv = document.createElement('div');
@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     testDiv.style.border = '2px solid #22d3ee';
     document.getElementById('out').prepend(testDiv);
     
+    // Create factory after element is in DOM
     const factory = new VF.Factory({ renderer: { elementId: "vf-sanity-test", width: 600, height: 200 }});
     const score = factory.EasyScore();
     const system = factory.System();
