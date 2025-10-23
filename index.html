@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NCEA L2 (AS91276) Question Generator</title>
+  <link rel="icon" href="favicon.ico">
   <!-- Load VexFlow from CDN (window.Vex.Flow available after load). -->
   <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
   <style>
@@ -118,6 +119,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  // VexFlow v4 uses HorizontalJustify / VerticalJustify; v3 used Justify / VerticalJustify on the class.
+  const HJ = (VF.Annotation && (VF.Annotation.HorizontalJustify || VF.Annotation.Justify)) || { LEFT:1, CENTER:2, RIGHT:3, CENTER_STEM:4 };
+  const VJ = (VF.Annotation && (VF.Annotation.VerticalJustify || VF.Annotation.VerticalJustify)) || { TOP:1, CENTER:2, BOTTOM:3, CENTER_STEM:4 };
+
   // --- Sanity check: test VexFlow rendering ---
   // This test is currently ACTIVE. Comment out the entire try/catch block after verification.
   
@@ -225,9 +230,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const na = new VF.StaveNote({ keys:[a],         duration:"8", clef:"treble" });
       const nb = new VF.StaveNote({ keys:[to.key],    duration:"8", clef:"treble" });
       if (to.acc) nb.addAccidental(0, new VF.Accidental(to.acc));
-      nb.addModifier(0, (new VF.Annotation(String(i))).setFont("Arial", 10)
-         .setJustification(VF.Annotation.Justify.CENTER)
-         .setVerticalJustification(VF.Annotation.VerticalJustify.TOP));
+      const ann = new VF.Annotation(String(i));
+      ann.setFont("Arial", 10);
+      ann.setJustification(HJ.CENTER);
+      ann.setVerticalJustification(VJ.TOP);
+      nb.addModifier(0, ann);
       notes.push(na, nb);
     }
     const voice = score.voice(notes, {time:"12/4"});
