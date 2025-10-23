@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NCEA L2 (AS91276) Question Generator</title>
-  <!-- Load a UMD build of VexFlow (window.Vex.Flow available after load). -->
-  <script src="https://unpkg.com/vexflow@3.0.9/build/cjs/vexflow-debug.js" defer></script>
+  <!-- Load VexFlow from CDN (window.Vex.Flow available after load). -->
+  <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
   <style>
     :root{
       --bg:#0f172a; --panel:#0b1224; --panel2:#101a33; --muted:#94a3b8; --text:#e5e7eb; --acc:#22d3ee; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
@@ -111,12 +111,37 @@
   <script type="module">
 document.addEventListener('DOMContentLoaded', async () => {
   // --- Ensure VexFlow is present ---
-  const VF = (window.Vex && window.Vex.Flow);
+  const VF = window.Vex && window.Vex.Flow;
   if (!VF) {
     console.error('VexFlow not loaded. Check the <script src> in <head>.');
-    alert('VexFlow failed to load. Refresh, or self-host vendor/vexflow-debug.js.');
+    alert('VexFlow failed to load. Check the CDN URL.');
     return;
   }
+
+  // --- Sanity check: test VexFlow rendering (comment out after verification) ---
+  // Uncomment to verify VexFlow loads and renders correctly:
+  
+  try {
+    const testDiv = document.createElement('div');
+    testDiv.id = 'vf-sanity-test';
+    testDiv.style.marginBottom = '20px';
+    testDiv.style.padding = '10px';
+    testDiv.style.border = '2px solid #22d3ee';
+    document.getElementById('out').prepend(testDiv);
+    
+    const factory = new VF.Factory({ renderer: { elementId: "vf-sanity-test", width: 600, height: 200 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+    const notes = score.notes("C4/q, D4, E4, F4");
+    const voice = score.voice(notes);
+    system.addStave({ voices: [voice] }).addClef("treble").addTimeSignature("4/4");
+    factory.draw();
+    console.log('VexFlow sanity check passed!');
+  } catch (error) {
+    console.error('VexFlow sanity check failed:', error);
+    alert('VexFlow sanity check failed: ' + error.message);
+  }
+  
 
   // --- Load mined data ---
   const fetchJSON = (url, fallback) => fetch(url).then(r => r.ok ? r.json() : fallback).catch(() => fallback);
