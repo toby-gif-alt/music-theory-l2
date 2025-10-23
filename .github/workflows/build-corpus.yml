@@ -1,0 +1,26 @@
+name: Build corpus for Pages
+on:
+  push:
+    paths:
+      - info/**.pdf
+      - scripts/**.mjs
+      - data/banks.json
+      - .github/workflows/build-corpus.yml
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci || npm i
+      - run: node scripts/build-corpus.mjs
+      - name: Commit mined data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/corpus.json data/patterns.json
+          git commit -m "chore: update mined corpus/patterns" || echo "no changes"
+          git push
