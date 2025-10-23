@@ -171,6 +171,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     instruments: { Bb:["Clarinet in Bb","Trumpet in Bb"], Eb:["Alto Sax in Eb","Baritone Sax in Eb"], F:["Horn in F"] }
   });
   const patterns = await fetchJSON('data/patterns.json', { stems:[], verbs:[], rubric:[] });
+  // load the trained bank
+  const bank = await fetchJSON('data/question_bank.json', null);
+
+  // helper to pick a stem that matches the topic, falling back to defaults
+  function pickStem(topic, fallback) {
+    if (!bank) return fallback;
+    const pool = (bank.topics && bank.topics[topic])?.length ? bank.topics[topic] : [];
+    if (pool.length) return pool[Math.floor(Math.random()*pool.length)];
+    // else search raw stems by keyword
+    const hit = (bank.stems||[]).filter(s => s.toLowerCase().includes(topic.toLowerCase()));
+    return hit.length ? hit[Math.floor(Math.random()*hit.length)] : fallback;
+  }
 
   // --- Helpers (ASCII only) ---
   const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -313,38 +325,159 @@ document.addEventListener('DOMContentLoaded', async () => {
     factory.draw();
   }
 
+  // --- Template-aware engraving functions ---
+  function engraveTonalityFromTemplate(containerId, tpl){
+    const { key, time, bars } = tpl;
+    const VF = window.Vex.Flow;
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 640, height: 180 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+    const tokens = bars.flat().join(', '); // flatten array-of-bars into EasyScore tokens
+    const notes = score.notes(tokens);
+    notes.forEach(colorRed);
+    const voice = score.voice(notes, { time: time || '4/4' });
+    const stave = system.addStave({ voices:[voice] });
+    stave.addClef('treble').addKeySignature(key || 'C').addTimeSignature(time || '4/4');
+    factory.draw();
+  }
+
+  function engraveCadencesFromTemplate(containerId, tpl){
+    const { key, type, seg } = tpl;
+    const VF = window.Vex.Flow;
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+    const tokens = seg.flat().join(', ');
+    const notes = score.notes(tokens);
+    notes.forEach(colorRed);
+    const voice = score.voice(notes, { time: '4/4' });
+    const stave = system.addStave({ voices:[voice] });
+    stave.addClef('treble').addKeySignature(key || 'C').addTimeSignature('4/4');
+    factory.draw();
+  }
+
+  function engraveHarmonyFromTemplate(containerId, tpl){
+    const { key, time, roman, bass } = tpl;
+    const VF = window.Vex.Flow;
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+    const tokens = bass.join(', ');
+    const notes = score.notes(tokens);
+    notes.forEach(colorRed);
+    // Add roman numeral annotations
+    notes.forEach((staveNote, idx) => {
+      if (idx < roman.length) {
+        const ann = new VF.Annotation(roman[idx]);
+        ann.setFont('Arial', 10);
+        ann.setJustification(HJ.CENTER);
+        ann.setVerticalJustification(VJ.BOTTOM);
+        staveNote.addModifier(ann, 0);
+      }
+    });
+    const voice = score.voice(notes, { time: time || '4/4' });
+    const stave = system.addStave({ voices:[voice] });
+    stave.addClef('bass').addKeySignature(key || 'C').addTimeSignature(time || '4/4');
+    factory.draw();
+  }
+
+  function engraveIntervalsFromTemplate(containerId, tpl){
+    // For intervals, we use the template to generate pairs
+    const VF = window.Vex.Flow;
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+    
+    const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
+    const keySig = keys[Math.floor(Math.random()*keys.length)];
+    
+    const templates = (bank?.templates?.Intervals || []);
+    const tokens = []; // 12 tokens of "/8"
+    for (let i=1; i<=6; i++){
+      const aKey = randNoteTreble(); // e.g. "c/4"
+      const t = templates[Math.floor(Math.random()*templates.length)] || { label:'P5', semi:7 };
+      const semi = (Math.random()<0.5 ? -1 : 1) * (t.semi || 7);
+      
+      const aTok = aKey.toUpperCase().replace('/', '') + '/8'; // "C4/8"
+      const to   = semitoneOffset(aKey, semi);                  // {letter,acc,oct}
+      const bTok = toEasyToken(to, 8);                          // "C#4/8" etc
+      tokens.push(aTok, bTok);
+    }
+    
+    const notes = score.notes(tokens.join(', '));
+    notes.forEach((staveNote, idx) => {
+      colorRed(staveNote);
+      if ((idx % 2) === 1) {
+        const ann = new VF.Annotation(String((idx+1)/2));
+        ann.setFont('Arial', 10);
+        ann.setJustification(HJ.CENTER);
+        ann.setVerticalJustification(VJ.TOP);
+        staveNote.addModifier(ann, 0);
+      }
+    });
+    const beams = score.beam(notes);
+    const voice = score.voice(notes, { time: '12/8' });
+    const stave = system.addStave({ voices:[voice] });
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('12/8');
+    factory.draw();
+  }
+
+  function engraveTranspositionFromTemplate(containerId, tpl){
+    const { inst, dir, interval } = tpl;
+    const VF = window.Vex.Flow;
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const score = factory.EasyScore();
+    const system = factory.System();
+    
+    const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
+    const keySig = keys[Math.floor(Math.random()*keys.length)];
+    const pool = ['C4/8','D4/8','E4/8','F4/8','G4/8','A4/8','B4/8','C5/8'];
+    const tokens = Array.from({length:8}, () => pool[Math.floor(Math.random()*pool.length)]).join(', ');
+    
+    const notes = score.notes(tokens);
+    notes.forEach(colorRed);
+    const beams = score.beam(notes);
+    const voice = score.voice(notes, { time: '4/4' });
+    const stave = system.addStave({ voices:[voice] });
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
+    factory.draw();
+  }
+
   // --- Question objects (ASCII only) ---
   const GEN = {
     qIntervals: function(level){
-      const stem = DIFF[level]("Identify the quality and quantity of the labelled intervals 1 to 6.");
-      return { topic:"Intervals", stem:stem, model:"Quality + quantity on each; correct for clef.", render: engraveIntervals };
+      const stem = pickStem('Intervals', "Identify the quality and quantity of the labelled intervals 1 to 6.");
+      const tpl = (bank?.templates?.Intervals||[])[0] || { label:'P5', semi:7 };
+      return { topic:"Intervals", stem: DIFF[level](stem), model:"Quality + quantity on each; correct for clef.", render: (id) => engraveIntervalsFromTemplate(id, tpl) };
     },
     qTransposition: function(level){
-      const fams = Object.keys(banks.instruments || {Bb:[],Eb:[],F:[]});
-      const fam  = fams.length ? pick(fams) : "Bb";
-      const insts= (banks.instruments && banks.instruments[fam]) || ["Clarinet in Bb"];
-      const inst = pick(insts);
+      const templates = (bank?.templates?.Transposition || []);
+      const tpl = templates.length ? templates[Math.floor(Math.random()*templates.length)] : { inst:'Clarinet in Bb', dir:'to concert', interval:'M2 down' };
+      const inst = tpl.inst || "Clarinet in Bb";
       const base = "Transpose to concert pitch: " + inst + ". ";
       const addA = "State the interval and direction.";
       const addM = "State the interval, resulting key, and direction.";
       const addE = "Justify key-signature changes and accidentals.";
       const tail = (level === "A") ? addA : (level === "M") ? addM : addE;
-      const stem = DIFF[level](base + tail);
-      return { topic:"Transposition", stem:stem, model:"Bb=M2, Eb=M6, F=P5 families.", render: engraveTransposition };
+      const stem = pickStem('Transposition', base + tail);
+      return { topic:"Transposition", stem: DIFF[level](stem), model:"Bb=M2, Eb=M6, F=P5 families.", render: (id) => engraveTranspositionFromTemplate(id, tpl) };
     },
     qTonality: function(level){
-      const base = "Identify the key and give evidence (for example, V or V7 to I near cadence).";
-      const stem = DIFF[level](base);
-      return { topic:"Tonality", stem:stem, model:"Evidence: key signature; V or V7->I; opening/closing chords.", render: engraveTonality };
+      const stem = pickStem('Tonality', "Identify the key and give evidence (for example, V or V7 to I near cadence).");
+      const tpl = (bank?.templates?.Tonality||[])[Math.floor(Math.random()*(bank?.templates?.Tonality||[]).length)] || { key:'C', time:'4/4', bars:[['C4/8','D4/8','E4/8','F4/8','G4/8','F4/8','E4/8','C4/8']], cadence:'V–I' };
+      return { topic:"Tonality", stem: DIFF[level](stem), model:"Evidence: key signature; V or V7->I; opening/closing chords.", render: (id) => engraveTonalityFromTemplate(id, tpl) };
     },
     qHarmony: function(level){
-      const stem = DIFF[level]("Add chord symbols for a 4 bar phrase. Include one inversion.");
-      return { topic:"Harmony", stem:stem, model:"Derive from bass and melody; include inversion; cadential function." };
+      const stem = pickStem('Harmony', "Add chord symbols for a 4 bar phrase. Include one inversion.");
+      const tpl = (bank?.templates?.Harmony||[])[Math.floor(Math.random()*(bank?.templates?.Harmony||[]).length)] || { key: 'C', time:'4/4', roman:['I','IV','V','I'], bass: ['C3/4','F3/4','G3/4','C3/4'] };
+      return { topic:"Harmony", stem: DIFF[level](stem), model:"Derive from bass and melody; include inversion; cadential function.", render: (id) => engraveHarmonyFromTemplate(id, tpl) };
     },
     qCadences: function(level){
-      const cad = pick(banks.cadenceTypes || ["perfect (V-I)","plagal (IV-I)","imperfect (any-V)","interrupted (V-vi)"]);
-      const stem = DIFF[level]("Name the cadence (for example: " + cad + ").");
-      return { topic:"Cadences", stem:stem, model: cad.split(" ")[0] + " cadence; chord tones support label." };
+      const templates = (bank?.templates?.Cadences || []);
+      const tpl = templates.length ? templates[Math.floor(Math.random()*templates.length)] : { key:'D', type:'perfect (V–I)', seg:[['A3/4','D4/4']] };
+      const cad = tpl.type || pick(banks.cadenceTypes || ["perfect (V-I)","plagal (IV-I)","imperfect (any-V)","interrupted (V-vi)"]);
+      const stem = pickStem('Cadences', "Name the cadence (for example: " + cad + ").");
+      return { topic:"Cadences", stem: DIFF[level](stem), model: cad.split(" ")[0] + " cadence; chord tones support label.", render: (id) => engraveCadencesFromTemplate(id, tpl) };
     }
   };
   const TOPIC_KEYS = Object.keys(GEN);
