@@ -1,9 +1,26 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-const args = Object.fromEntries(process.argv.slice(2).map(a=>{
-  const m = a.match(/^--([^=]+)=(.*)$/); return m? [m[1], m[2]] : [a.replace(/^--/,''), true];
-}));
+const args = {};
+const argv = process.argv.slice(2);
+for(let i=0; i<argv.length; i++){
+  const a = argv[i];
+  if(a.startsWith('--')){
+    const m = a.match(/^--([^=]+)=(.*)$/);
+    if(m){
+      args[m[1]] = m[2];
+    } else {
+      const key = a.replace(/^--/,'');
+      const next = argv[i+1];
+      if(next && !next.startsWith('--')){
+        args[key] = next;
+        i++;
+      } else {
+        args[key] = true;
+      }
+    }
+  }
+}
 const IN = args.in || 'pack.json';
 
 const pack = JSON.parse(await fs.readFile(IN,'utf8'));
