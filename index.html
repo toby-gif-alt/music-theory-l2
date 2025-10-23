@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NCEA L2 (AS91276) Question Generator</title>
-  <!-- VexFlow UMD build; must load BEFORE our module that references window.Vex.Flow -->
-  <script src="https://unpkg.com/vexflow/releases/vexflow-debug.js" defer></script>
+  <!-- Load a UMD build of VexFlow (window.Vex.Flow available after load). -->
+  <script src="https://unpkg.com/vexflow@3.0.9/build/cjs/vexflow-debug.js" defer></script>
   <style>
     :root{
       --bg:#0f172a; --panel:#0b1224; --panel2:#101a33; --muted:#94a3b8; --text:#e5e7eb; --acc:#22d3ee; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
@@ -110,204 +110,228 @@
 
   <script type="module">
 document.addEventListener('DOMContentLoaded', async () => {
-  // 1) Ensure VexFlow is available
+  // --- Ensure VexFlow is present ---
   const VF = (window.Vex && window.Vex.Flow);
   if (!VF) {
     console.error('VexFlow not loaded. Check the <script src> in <head>.');
-    alert('VexFlow failed to load. Please refresh.'); 
+    alert('VexFlow failed to load. Refresh, or self-host vendor/vexflow-debug.js.');
     return;
   }
 
-  // 2) Fetch mined banks/patterns (created by the GitHub Action)
-  const [banks, patterns] = await Promise.all([
-    fetch('data/banks.json').then(r => r.json()).catch(() => ({})),
-    fetch('data/patterns.json').then(r => r.json()).catch(() => ({stems:[], verbs:[], rubric:[]})),
-  ]);
+  // --- Load mined data ---
+  const fetchJSON = (url, fallback) => fetch(url).then(r => r.ok ? r.json() : fallback).catch(() => fallback);
+  const banks = await fetchJSON('data/banks.json', {
+    intervalQualities: ["minor","major","perfect","diminished","augmented"],
+    intervalNumbers: ["2nd","3rd","4th","5th","6th","7th","octave"],
+    keys: ["C","G","D","A","E","B","F#","F","Bb","Eb","Ab","Db"],
+    modes: ["major","minor"],
+    cadenceTypes: ["perfect (V-I)","plagal (IV-I)","imperfect (any-V)","interrupted (V-vi)"],
+    devices: [["sequence","repeat motif higher/lower"],["ostinato","repeated motif"],["inversion","intervals inverted"],["augmentation","note values longer"],["diminution","note values shorter"]],
+    perf: [["staccato","short, detached"],["tenuto","slightly longer"],["marcato","accented"],["accent","emphasised"],["legato","smooth, connected"]],
+    instruments: { Bb:["Clarinet in Bb","Trumpet in Bb"], Eb:["Alto Sax in Eb","Baritone Sax in Eb"], F:["Horn in F"] }
+  });
+  const patterns = await fetchJSON('data/patterns.json', { stems:[], verbs:[], rubric:[] });
 
-  // ---- helpers ----
-  const pick = a => a[Math.floor(Math.random()*a.length)];
-  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  // --- Helpers (ASCII only) ---
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const cap  = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const el   = id => document.getElementById(id);
   const DIFF = {
-    A: s => `Identify / describe: ${s}`,
-    M: s => `Explain with evidence from the score: ${s}`,
-    E: s => `Analyse/apply and discuss the effect on the music: ${s}`
+    A: s => "Identify / describe: " + s,
+    M: s => "Explain with evidence from the score: " + s,
+    E: s => "Analyse/apply and discuss the effect on the music: " + s
   };
-  const el = id => document.getElementById(id);
 
-  // ---- VexFlow helpers ----
-  function vfFactory(containerId, {width=560, height=160} = {}) {
-    const factory = new VF.Factory({ renderer: { elementId: containerId, width, height }});
-    return factory;
+  // --- VexFlow helpers ---
+  function vfFactory(containerId, size) {
+    const width  = (size && size.width)  || 560;
+    const height = (size && size.height) || 160;
+    return new VF.Factory({ renderer: { elementId: containerId, width, height }});
   }
-  function drawSystem(factory, {clef='treble', keySig='C', timeSig='4/4'}={}) {
-    const score = factory.EasyScore();
+  function drawSystem(factory, opts) {
+    const clef   = (opts && opts.clef)   || "treble";
+    const keySig = (opts && opts.keySig) || "C";
+    const timeSig= (opts && opts.timeSig)|| "4/4";
+    const score  = factory.EasyScore();
     const system = factory.System();
-    const stave = system.addStave({ voices: [] });
+    const stave  = system.addStave({ voices: [] });
     stave.addClef(clef).addKeySignature(keySig).addTimeSignature(timeSig);
     return { score, system, stave };
   }
-  function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+  function randInt(a, b){ return Math.floor(Math.random() * (b - a + 1)) + a; }
+  function randNoteTreble(){ return pick(["c","d","e","f","g","a","b"]) + "/" + randInt(4,5); }
   function semitoneOffset(note, semi){
-    const [letter,octStr] = note.split('/');
+    const parts = note.split("/");
+    const letter = parts[0], oct = parseInt(parts[1], 10);
     const pcMap = {c:0,d:2,e:4,f:5,g:7,a:9,b:11};
-    const base = pcMap[letter] + 12*parseInt(octStr,10);
-    const midi = base + semi;
-    const oct = Math.floor(midi/12);
-    const pcs = {c:0,'c#':1,d:2,'d#':3,e:4,f:5,'f#':6,g:7,'g#':8,a:9,'a#':10,b:11};
-    const name = Object.entries(pcs).find(([,v])=>v===midi%12)[0];
-    const acc = name.includes('#') ? '#' : null;
-    return { key: `${name.replace('#','')}/${oct}`, acc };
+    const base  = pcMap[letter] + 12*oct;
+    const midi  = base + semi;
+    const outOct = Math.floor(midi/12);
+    const pcs = {c:0,"c#":1,d:2,"d#":3,e:4,f:5,"f#":6,g:7,"g#":8,a:9,"a#":10,b:11};
+    let outName = "c";
+    for (const k in pcs){ if (pcs[k] === (midi % 12 + 12) % 12) { outName = k; break; } }
+    const acc = outName.indexOf("#") >= 0 ? "#" : null;
+    const baseLetter = outName.replace("#",""); 
+    return { key: baseLetter + "/" + outOct, acc };
   }
-  function randNoteTreble(){ return `${pick(['c','d','e','f','g','a','b'])}/${randInt(4,5)}`; }
 
-  // ---- engraved question builders ----
+  // --- Engraving builders (no nested backticks) ---
   function engraveIntervals(containerId){
     const factory = vfFactory(containerId);
-    const { score, system } = drawSystem(factory, {clef:'treble', keySig: pick(banks.keys || ['C']), timeSig:'4/4'});
-    const q = banks.intervalQualities || ['minor','major','perfect','diminished','augmented'];
-    const n = banks.intervalNumbers || ['2nd','3rd','4th','5th','6th','7th','octave'];
-    const mapN = { '2nd':2,'3rd':4,'4th':5,'5th':7,'6th':9,'7th':11,'octave':12 };
+    const keySig = pick(banks.keys || ["C"]);
+    const res = drawSystem(factory, {clef:"treble", keySig:keySig, timeSig:"4/4"});
+    const score = res.score, system = res.system;
+
+    const q = banks.intervalQualities || ["minor","major","perfect","diminished","augmented"];
+    const n = banks.intervalNumbers  || ["2nd","3rd","4th","5th","6th","7th","octave"];
+    const semis = {"2nd":2,"3rd":4,"4th":5,"5th":7,"6th":9,"7th":11,"octave":12};
 
     const notes = [];
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 6; i++){
       const a = randNoteTreble();
       const quality = pick(q);
       const number  = pick(n);
-      const step = mapN[number] || 7;
-      const adjust = quality==='minor'? -1 : quality==='augmented'? +1 : quality==='diminished'? -1 : 0;
-      const semi = (Math.random()<0.5? -1 : 1) * (step + adjust);
-      const { key: bKey, acc } = semitoneOffset(a, semi);
+      const step    = semis[number] || 7;
+      const adjust  = (quality === "minor") ? -1 : (quality === "augmented") ? 1 : (quality === "diminished") ? -1 : 0;
+      const semi    = (Math.random() < 0.5 ? -1 : 1) * (step + adjust);
+      const to      = semitoneOffset(a, semi);
 
-      const na = new VF.StaveNote({ keys:[a], duration:'8', clef:'treble' });
-      const nb = new VF.StaveNote({ keys:[bKey], duration:'8', clef:'treble' });
-      if (acc) nb.addAccidental(0, new VF.Accidental(acc));
-      nb.addModifier(0, (new VF.Annotation(String(i))).setFont('Arial', 10)
+      const na = new VF.StaveNote({ keys:[a],         duration:"8", clef:"treble" });
+      const nb = new VF.StaveNote({ keys:[to.key],    duration:"8", clef:"treble" });
+      if (to.acc) nb.addAccidental(0, new VF.Accidental(to.acc));
+      nb.addModifier(0, (new VF.Annotation(String(i))).setFont("Arial", 10)
          .setJustification(VF.Annotation.Justify.CENTER)
          .setVerticalJustification(VF.Annotation.VerticalJustify.TOP));
       notes.push(na, nb);
     }
-    const voice = score.voice(notes, {time:'12/4'});
+    const voice = score.voice(notes, {time:"12/4"});
     system.addStave({ voices:[voice] });
     factory.draw();
   }
 
   function engraveTransposition(containerId){
     const factory = vfFactory(containerId);
-    const { score, system } = drawSystem(factory, {clef:'treble', keySig: pick(banks.keys || ['C']), timeSig:'4/4'});
-    const pool = ['c/4','d/4','e/4','f/4','g/4','a/4','b/4','c/5'];
-    const seq = Array.from({length:8}, ()=> pick(pool))
-      .map(k => new VF.StaveNote({ keys:[k], duration:'8', clef:'treble' }));
-    const voice = score.voice(seq, {time:'4/4'});
+    const keySig = pick(banks.keys || ["C"]);
+    const res = drawSystem(factory, {clef:"treble", keySig:keySig, timeSig:"4/4"});
+    const score = res.score, system = res.system;
+    const pool = ["c/4","d/4","e/4","f/4","g/4","a/4","b/4","c/5"];
+    const seq = Array.from({length:8}, () => pick(pool))
+      .map(k => new VF.StaveNote({ keys:[k], duration:"8", clef:"treble" }));
+    const voice = score.voice(seq, {time:"4/4"});
     system.addStave({ voices:[voice] });
     factory.draw();
   }
 
   function engraveTonality(containerId){
     const factory = vfFactory(containerId, {width:640, height:170});
-    const { score, system } = drawSystem(factory, {clef:'treble', keySig: pick(banks.keys || ['C']), timeSig:'4/4'});
-    const bar1 = ['c/4','d/4','e/4','f/4','g/4','a/4','b/4','c/5'];
-    const bar2 = ['e/5','d/5','c/5','b/4','a/4','g/4','f/4','e/4'];
-    const seq = bar1.concat(bar2).map(k => new VF.StaveNote({ keys:[k], duration:'8', clef:'treble' }));
-    const voice = score.voice(seq, {time:'8/4'});
+    const keySig = pick(banks.keys || ["C"]);
+    const res = drawSystem(factory, {clef:"treble", keySig:keySig, timeSig:"4/4"});
+    const score = res.score, system = res.system;
+    const bar1 = ["c/4","d/4","e/4","f/4","g/4","a/4","b/4","c/5"];
+    const bar2 = ["e/5","d/5","c/5","b/4","a/4","g/4","f/4","e/4"];
+    const seq = bar1.concat(bar2).map(k => new VF.StaveNote({ keys:[k], duration:"8", clef:"treble" }));
+    const voice = score.voice(seq, {time:"8/4"});
     system.addStave({ voices:[voice] });
     factory.draw();
   }
 
-  // ---- question objects ----
+  // --- Question objects (ASCII only) ---
   const GEN = {
-    qIntervals(level){
-      return { topic: 'Intervals',
-        stem: `${DIFF[level]('Identify the quality and quantity of the labelled intervals ①–⑥.')}`,
-        model: `Quality + quantity on each; correct for clef.`,
-        render: engraveIntervals };
+    qIntervals: function(level){
+      const stem = DIFF[level]("Identify the quality and quantity of the labelled intervals 1 to 6.");
+      return { topic:"Intervals", stem:stem, model:"Quality + quantity on each; correct for clef.", render: engraveIntervals };
     },
-    qTransposition(level){
+    qTransposition: function(level){
       const fams = Object.keys(banks.instruments || {Bb:[],Eb:[],F:[]});
-      const fam = fams.length ? pick(fams) : 'Bb';
-      const inst = pick((banks.instruments && banks.instruments[fam]) || ['Clarinet in Bb']);
-      return { topic: 'Transposition',
-        stem: `${DIFF[level](\`Transpose to concert pitch: \${inst}. State the interval and \${level==='A'?'direction': level==='M'?'resulting key and direction':'justify key-signature change and accidentals'}.\`)}`,
-        model: `Bb=M2, Eb=M6, F=P5 transposition families.`,
-        render: engraveTransposition };
+      const fam  = fams.length ? pick(fams) : "Bb";
+      const insts= (banks.instruments && banks.instruments[fam]) || ["Clarinet in Bb"];
+      const inst = pick(insts);
+      const base = "Transpose to concert pitch: " + inst + ". ";
+      const addA = "State the interval and direction.";
+      const addM = "State the interval, resulting key, and direction.";
+      const addE = "Justify key-signature changes and accidentals.";
+      const tail = (level === "A") ? addA : (level === "M") ? addM : addE;
+      const stem = DIFF[level](base + tail);
+      return { topic:"Transposition", stem:stem, model:"Bb=M2, Eb=M6, F=P5 families.", render: engraveTransposition };
     },
-    qTonality(level){
-      return { topic: 'Tonality',
-        stem: `${DIFF[level]('Identify the key and give evidence (e.g., V or V7→I near cadence).')}`,
-        model: `Evidence: key signature; V or V7→I; opening/closing chords.`,
-        render: engraveTonality };
+    qTonality: function(level){
+      const base = "Identify the key and give evidence (for example, V or V7 to I near cadence).";
+      const stem = DIFF[level](base);
+      return { topic:"Tonality", stem:stem, model:"Evidence: key signature; V or V7->I; opening/closing chords.", render: engraveTonality };
     },
-    qHarmony(level){
-      return { topic: 'Harmony',
-        stem: `${DIFF[level]('Add chord symbols for a 4-bar phrase (include one inversion).')}`,
-        model: `Derive from bass + melody; include inversion; cadential function.` };
+    qHarmony: function(level){
+      const stem = DIFF[level]("Add chord symbols for a 4 bar phrase. Include one inversion.");
+      return { topic:"Harmony", stem:stem, model:"Derive from bass and melody; include inversion; cadential function." };
     },
-    qCadences(level){
-      const cad = pick(banks.cadenceTypes || ['perfect (V–I)','plagal (IV–I)','imperfect (any–V)','interrupted (V–vi)']);
-      return { topic: 'Cadences',
-        stem: `${DIFF[level](\`Name the cadence (\${cad} may occur).\`)}`,
-        model: `${cad.split(' ')[0]} cadence; chord tones support label.` };
-    },
+    qCadences: function(level){
+      const cad = pick(banks.cadenceTypes || ["perfect (V-I)","plagal (IV-I)","imperfect (any-V)","interrupted (V-vi)"]);
+      const stem = DIFF[level]("Name the cadence (for example: " + cad + ").");
+      return { topic:"Cadences", stem:stem, model: cad.split(" ")[0] + " cadence; chord tones support label." };
+    }
   };
   const TOPIC_KEYS = Object.keys(GEN);
 
-  // ---- Schedule text ----
+  // --- Schedule text ---
   function scheduleFor(key){
     const base = {
-      A:'Identifies / describes correctly.',
-      M:'Explains using specific evidence (bars, parts, notation).',
-      E:'Analyses and states the effect on performance/sound.'
+      A: "Identifies or describes correctly.",
+      M: "Explains using specific evidence (bars, parts, notation).",
+      E: "Analyses and states the effect on performance or sound."
     };
     const special = {
-      qIntervals:{A:'Names quality/quantity of most intervals.', M:'All intervals with workings.', E:'Links dissonance/resolution to effect.'},
-      qTransposition:{A:'Correct direction & interval.', M:'Resulting key & signature correct.', E:'Justifies signature/accidentals & tessitura impact.'},
-      qTonality:{A:'Names plausible key.', M:'Two pieces of evidence (cadence/chords/accidentals).', E:'Notes brief modulation/tonicisation with chord evidence.'}
+      qIntervals:   { A:"Names quality and quantity for most intervals.", M:"All intervals with workings.", E:"Links dissonance or resolution to effect." },
+      qTransposition:{A:"Correct direction and interval.", M:"Resulting key and signature correct.", E:"Justifies signature/accidentals and tessitura impact."},
+      qTonality:    { A:"Names plausible key.", M:"Two pieces of evidence (cadence/chords/accidentals).", E:"Notes brief modulation or tonicisation with chord evidence." }
     };
-    const sp = special[key]||{};
-    return { A:sp.A||base.A, M:sp.M||base.M, E:sp.E||base.E };
+    const sp = special[key] || {};
+    return { A: sp.A || base.A, M: sp.M || base.M, E: sp.E || base.E };
   }
 
-  // ---- renderers ----
+  // --- Renderers ---
   function renderExam(qs){
-    const out = el('out'); out.innerHTML='';
-    qs.forEach((q,i)=>{
+    const out = el('out'); if (!out) return;
+    out.innerHTML = "";
+    qs.forEach((q,i) => {
       const div = document.createElement('div');
-      const vfId = `vf-${i+1}`;
-      div.className='qbox';
-      div.innerHTML = `<h3>Q${i+1} [${q.topic}]</h3><div class="mono">${q.stem}</div><div id="${vfId}"></div>`;
+      const vfId = "vf-" + (i+1);
+      div.className = "qbox";
+      div.innerHTML = "<h3>Q" + (i+1) + " [" + q.topic + "]</h3>"
+                    + "<div class=\"mono\">" + q.stem + "</div>"
+                    + "<div id=\"" + vfId + "\"></div>";
       out.appendChild(div);
       if (q.render) q.render(vfId);
     });
   }
   function renderSchedule(qs){
-    const container = el('schedule'); container.innerHTML='';
-    const head = document.createElement('div'); head.innerHTML = '<h2>Assessment Schedule</h2>';
-    container.appendChild(head);
-    qs.forEach((q,i)=>{
+    const sc = el('schedule'); if (!sc) return;
+    sc.innerHTML = "<h2>Assessment Schedule</h2>";
+    qs.forEach((q,i) => {
       const s = scheduleFor(q._key);
       const sec = document.createElement('div');
-      sec.className='qbox';
-      sec.innerHTML = `<h3>Q${i+1} [${q.topic}]</h3>
-        <ul>
-          <li><strong>Achievement:</strong> ${s.A}</li>
-          <li><strong>Merit:</strong> ${s.M}</li>
-          <li><strong>Excellence:</strong> ${s.E}</li>
-        </ul>`;
-      container.appendChild(sec);
+      sec.className = "qbox";
+      sec.innerHTML = "<h3>Q" + (i+1) + " [" + q.topic + "]</h3>"
+                    + "<ul>"
+                    + "<li><strong>Achievement:</strong> " + s.A + "</li>"
+                    + "<li><strong>Merit:</strong> " + s.M + "</li>"
+                    + "<li><strong>Excellence:</strong> " + s.E + "</li>"
+                    + "</ul>";
+      sc.appendChild(sec);
     });
   }
 
-  // ---- main ----
+  // --- Main ---
   function buildPack(){
     const topicsSel = el('topics');
-    const chosen = topicsSel ? Array.from(topicsSel.selectedOptions).map(o=>o.value) : [];
+    const chosen = topicsSel ? Array.from(topicsSel.selectedOptions).map(o => o.value) : [];
     const keys = chosen.length ? chosen : TOPIC_KEYS;
-    const level = (el('difficulty')?.value || 'A').toUpperCase();
-    const n = Math.min(Math.max(parseInt(el('qty')?.value) || 8, 1), 30);
+    const level = (el('difficulty') && el('difficulty').value || "A").toUpperCase();
+    const qtyEl = el('qty');
+    const n = Math.min(Math.max(parseInt(qtyEl && qtyEl.value, 10) || 8, 1), 30);
     const qs = [];
-    for (let i=0;i<n;i++){
+    for (let i = 0; i < n; i++){
       const k = pick(keys);
-      const fn = GEN[k];
-      const q = fn(level); q._key = k;
+      const q = GEN[k](level);
+      q._key = k;
       qs.push(q);
     }
     renderExam(qs);
@@ -315,11 +339,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     window._lastQs = qs;
   }
 
-  el('gen')?.addEventListener('click', buildPack);
-  el('clear')?.addEventListener('click', ()=>{ el('out').innerHTML=''; el('schedule').innerHTML=''; });
-  el('print')?.addEventListener('click', ()=> window.print());
+  const btnGen = el('gen'), btnClear = el('clear'), btnPrint = el('print');
+  if (btnGen)   btnGen.addEventListener('click', buildPack);
+  if (btnClear) btnClear.addEventListener('click', () => { if (el('out')) el('out').innerHTML = ""; if (el('schedule')) el('schedule').innerHTML = ""; });
+  if (btnPrint) btnPrint.addEventListener('click', () => window.print());
 
-  // Auto-run once for instant preview
+  // Generate once on load
   buildPack();
 });
 </script>
