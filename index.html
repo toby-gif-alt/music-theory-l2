@@ -59,10 +59,9 @@
       <div class="pad">
         <h2>Build a pack</h2>
         <label>Topics (choose one or more)</label>
-        <select id="topics" multiple size="8">
+        <select id="topics" multiple size="7">
           <option value="qIntervals">Intervals (quality + quantity)</option>
           <option value="qTransposition">Transposition (Bb/Eb/F to concert & back)</option>
-          <option value="qTexture">Texture & contrast (describe → analyse effect)</option>
           <option value="qTonality">Tonality (key + evidence, modulation)</option>
           <option value="qHarmony">Harmony (chord symbols, inversions)</option>
           <option value="qCadences">Cadences (ID + bass/7th logic – text)</option>
@@ -109,12 +108,26 @@
     </section>
   </main>
 
+<script src="https://unpkg.com/vexflow/releases/vexflow-debug.js"></script>
+  
   <script type="module">
 // ===== Auto Loader: fetch mined data from /data produced by the Action =====
 const [banks, patterns] = await Promise.all([
   fetch('data/banks.json').then(r=>r.json()),
   fetch('data/patterns.json').then(r=>r.json()).catch(()=>({stems:[], verbs:[], rubric:[]}))
 ]).catch(err=>{ console.error(err); return [{}, {stems:[],verbs:[],rubric:[]}]; });
+
+// ===== Load VexFlow (from window if script tag present) =====
+let VF = window.Vex && window.Vex.Flow;
+if(!VF){
+  try {
+    // Fallback: dynamic import from CDN (works on Pages). If you self-host, remove this.
+    await import('https://unpkg.com/vexflow/releases/vexflow-debug.js');
+    VF = window.Vex.Flow;
+  } catch(e) {
+    console.warn('VexFlow not available, notation rendering disabled:', e.message);
+  }
+}
 
 // ===== Helpers =====
 const pick = a => a[Math.floor(Math.random()*a.length)];
@@ -125,32 +138,124 @@ const DIFF = {
   E: s=>`Analyse/apply and discuss the effect on the music: ${s}`
 };
 
-// ===== Question Generators (browser) =====
+// ===== Notation helpers (VexFlow) =====
+const NOTE_NAMES = ['c','d','e','f','g','a','b'];
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function randNoteInRange(clef){
+  // Rough ranges per clef
+  if(clef==='bass') return {key: `${pick(['c','d','e','f','g','a','b'])}/${randInt(2,4)}`, acc: null};
+  return {key: `${pick(['c','d','e','f','g','a','b'])}/${randInt(4,5)}`, acc: null};
+}
+function semitoneOffset(note, semi){
+  // Convert like 'c/4' to midi-ish number, offset, and back (simple diatonic + sharps only for demo)
+  const [n,octStr] = note.split('/');
+  const base = {c:0,d:2,e:4,f:5,g:7,a:9,b:11}[n[0]] + 12*parseInt(octStr);
+  const midi = base + semi;
+  const oct = Math.floor(midi/12);
+  const pc = midi%12;
+  const name = Object.entries({c:0, 'c#':1, d:2, 'd#':3, e:4, f:5,'f#':6, g:7,'g#':8, a:9,'a#':10, b:11}).find(([,v])=>v===pc)[0];
+  const acc = name.includes('#')?'#':null; const letter = name.replace('#','');
+  return { key: `${letter}/${oct}`, acc };
+}
+function vfFactory(el, {width=540, height=160}={}){
+  if(!VF) return null;
+  const f = new VF.Factory({renderer:{elementId: el, width, height}});
+  return f;
+}
+function drawSystem(f, {clef='treble', keySig='C', timeSig='4/4'}={}){
+  if(!f) return {score:null, system:null, stave:null};
+  const score = f.EasyScore();
+  const system = f.System();
+  const stave = system.addStave({ voices: [] });
+  stave.addClef(clef).addKeySignature(keySig).addTimeSignature(timeSig);
+  return {score, system, stave};
+}
+
+// ===== Engraved question builders =====
+function engraveIntervals(elId, level){
+  if(!VF) return;
+  const f = vfFactory(elId);
+  if(!f) return;
+  const {score, system, stave} = drawSystem(f, {clef:'treble', keySig: pick(banks.keys), timeSig:'4/4'});
+  const notes = [];
+  const labels = [];
+  for(let i=1;i<=6;i++){
+    const base = randNoteInRange('treble');
+    const quality = pick(banks.intervalQualities);
+    const number = pick(banks.intervalNumbers);
+    // Map common intervals to semitone offsets (simplified)
+    const mapQ = { '2nd':2, '3rd':4, '4th':5, '5th':7, '6th':9, '7th':11, 'octave':12 };
+    const sign = Math.random()<0.5? -1: 1;
+    const semiBase = mapQ[number] || 7; // default perfect 5th
+    const adjust = quality==='minor'? -1 : quality==='augmented'? +1 : quality==='diminished'? -1 : 0;
+    const semi = sign*(semiBase + adjust);
+    const other = semitoneOffset(base.key, semi);
+    const na = new VF.StaveNote({ keys:[base.key], duration:'8', clef:'treble' });
+    if(base.acc) na.addAccidental(0, new VF.Accidental(base.acc));
+    const nb = new VF.StaveNote({ keys:[other.key], duration:'8', clef:'treble' });
+    if(other.acc) nb.addAccidental(0, new VF.Accidental(other.acc));
+    // add small number label above second note
+    nb.addModifier(0, (new VF.Annotation(String(i))).setFont('Arial', 10).setJustification(VF.Annotation.Justify.CENTER).setVerticalJustification(VF.Annotation.VerticalJustify.TOP));
+    notes.push(na, nb);
+  }
+  const voice = f.EasyScore().voice(notes, {time:'12/4'});
+  f.System().addStave({voices:[voice]});
+  f.draw();
+}
+
+function engraveTransposition(elId, level){
+  if(!VF) return;
+  const key = pick(banks.keys);
+  const clef = 'treble';
+  const f = vfFactory(elId);
+  if(!f) return;
+  const {score, system, stave} = drawSystem(f, {clef, keySig:key, timeSig:'4/4'});
+  // Build a simple 1-bar melody
+  const pitches = ['c/4','d/4','e/4','g/4','a/4','b/4','c/5'];
+  const seq = Array.from({length:8}, ()=> pick(pitches));
+  const vfNotes = seq.map(k=> new VF.StaveNote({ keys:[k], duration:'8', clef }));
+  const voice = score.voice(vfNotes, {time:'4/4'});
+  system.addStave({voices:[voice]});
+  f.draw();
+}
+
+function engraveTonality(elId, level){
+  if(!VF) return;
+  const key = pick(banks.keys);
+  const clef = 'treble';
+  const f = vfFactory(elId, {width:640, height:170});
+  if(!f) return;
+  const {score, system} = drawSystem(f, {clef, keySig:key, timeSig:'4/4'});
+  // Two bars: bar1 stepwise, bar2 small skips, implies V–I near end
+  const bar1 = ['c/4','d/4','e/4','f/4','g/4','a/4','b/4','c/5'];
+  const bar2 = ['e/5','d/5','c/5','b/4','a/4','g/4','f/4','e/4'];
+  const seq = bar1.map(p=> new VF.StaveNote({keys:[p], duration:'8', clef}))
+             .concat(bar2.map(p=> new VF.StaveNote({keys:[p], duration:'8', clef})));
+  const voice = score.voice(seq, {time:'8/4'});
+  system.addStave({voices:[voice]});
+  f.draw();
+}
+
+// ===== Text-only generators (kept for non-engraved topics) =====
 function qIntervals(level){
-  const items = Array.from({length:6},()=>`${pick(banks.intervalQualities)} ${pick(banks.intervalNumbers)}`);
-  return {topic:'Intervals', stem:`${DIFF[level]('Identify the quality and quantity of the labelled intervals ①–⑥ (e.g., minor 3rd).')} Intervals may include: ${items.join(', ')}.`, model:`Quality + quantity on each; correct for clef.`};
+  return {topic:'Intervals', stem:`${DIFF[level]('Identify the quality and quantity of the labelled intervals ①–⑥ (e.g., minor 3rd).')}`, model:`Quality + quantity on each; correct for clef.`, render:(id)=>engraveIntervals(id, level)};
 }
 function qTransposition(level){
   const fam = pick(Object.keys(banks.instruments));
   const inst = pick(banks.instruments[fam]);
   const dir = Math.random()<0.5?'to concert pitch':'to written pitch';
-  const key = `${pick(banks.keys)} ${pick(banks.modes)}`;
-  const ivl = fam==='Bb'? 'a major 2nd' : fam==='Eb'? 'a major 6th' : 'a perfect 5th';
-  return {topic:'Transposition', stem:`${DIFF[level](`Transpose ${dir}: ${inst} part in ${key}. State the transposition interval and ${level==='A'?'direction': level==='M'?'resulting key and direction':'justify key‑signature change and accidentals'}.`)}`, model:`${inst} transposes by ${ivl}. Include correct key signature; keep performance markings.`};
-}
-function qTexture(level){
-  return {topic:'Texture', stem:`${DIFF[level]('Discuss the texture using two specific pieces of evidence (bars/parts).')}`, model:`E.g., monophonic → homophonic; imitative entries; cite bars/parts.`};
+  return {topic:'Transposition', stem:`${DIFF[level](`Transpose ${dir}: ${inst}. State the transposition interval and ${level==='A'?'direction': level==='M'?'resulting key and direction':'justify key‑signature change and accidentals'}.`)}`, model:`${inst} transposes (Bb M2, Eb M6, F P5).`, render:(id)=>engraveTransposition(id, level)};
 }
 function qTonality(level){
-  const key = `${pick(banks.keys)} ${pick(banks.modes)}`;
-  return {topic:'Tonality', stem:`${DIFF[level](`Identify the key (${key} implied) and provide ${level==='A'?'one':'two'} piece(s) of evidence${level==='E'?'; comment on brief modulation':''}.`)}`, model:`${key}. Evidence: key sig; V or V7→I; opening/closing chords.`};
+  return {topic:'Tonality', stem:`${DIFF[level]('Identify the key and provide evidence (cadence/chord tones).')}`, model:`Key signature; V or V7→I; opening/closing tones.`, render:(id)=>engraveTonality(id, level)};
 }
+
 function qHarmony(level){
-  return {topic:'Harmony', stem:`${DIFF[level]('Add chord symbols (jazz/rock) for a 4‑bar phrase. Include one inversion.')}`, model:`Derive from bass + upper voices; include at least one inversion; cadential function.`};
+  return {topic:'Harmony', stem:`${DIFF[level]('Add chord symbols for a 4‑bar phrase. Include one inversion.')}`, model:`Derive from bass + melody; mark cadential point.`};
 }
 function qCadences(level){
   const cad = pick(banks.cadenceTypes);
-  return {topic:'Cadences', stem:`${DIFF[level](`Name the cadence (${cad} may occur)${level!=='A'?'; describe/notate bass (and 7th)':''}.`)}`, model:`${cad.split(' ')[0]} cadence; chord tones support label.`};
+  return {topic:'Cadences', stem:`${DIFF[level](`Name the cadence (${cad} may occur).`)}`, model:`${cad.split(' ')[0]} cadence; chord tones support label.`};
 }
 function qDevices(level){
   const [name,def] = pick(banks.devices);
@@ -161,127 +266,75 @@ function qPerf(level){
   return {topic:'Performance', stem:`${DIFF[level](`Explain how "${name}" would be played, with score evidence.`)}`, model:`${cap(name)} – ${why}.`};
 }
 
-const GEN = { qIntervals, qTransposition, qTexture, qTonality, qHarmony, qCadences, qDevices, qPerf };
+const GEN = { qIntervals, qTransposition, qTonality, qHarmony, qCadences, qDevices, qPerf };
 const TOPIC_KEYS = Object.keys(GEN);
 
-// ===== Evidence/Rubric builder for Assessment Schedule =====
-function scheduleFor(topic){
-  // Light, generic schedule aligned to A/M/E; we enrich with any mined verbs to sound authentic.
-  const extra = (patterns.verbs?.length? pick(patterns.verbs).replace(/\s+/g,' ').slice(0,120) : '');
+// ===== Assessment Schedule builder =====
+function scheduleFor(key){
   const base = {
     A: 'Identifies / describes correctly.',
     M: 'Explains using specific musical evidence (bars/parts/notations).',
     E: 'Analyses and states the effect on performance/sound; coherent justification.'
   };
   const special = {
-    qIntervals: {
-      A:'Names quality/quantity of most intervals.',
-      M:'Names all intervals with workings (semitone count / context).',
-      E:'Relates dissonance/resolution to musical effect.'
-    },
-    qTransposition: {
-      A:'States correct direction/interval.',
-      M:'Gives resulting key & direction with correct key signature.',
-      E:'Justifies signature/accidentals and performance/tessitura impact.'
-    },
-    qTonality: {
-      A:'Names plausible key.',
-      M:'Gives two pieces of evidence (cadence/chords/accidentals).',
-      E:'Comments on brief modulation or tonicisation with chord evidence.'
-    },
-    qHarmony: {
-      A:'Provides mostly correct chord symbols.',
-      M:'Includes inversion(s) and cadential point.',
-      E:'Explains harmonic function (T/S/D) and any secondary dominant.'
-    },
-    qCadences: {
-      A:'Labels cadence type correctly.',
-      M:'Supplies bass/7th as appropriate.',
-      E:'Explains closure/continuation effect and voice‑leading.'
-    },
-    qTexture: {
-      A:'Identifies texture(s).',
-      M:'Explains with two pieces of score evidence.',
-      E:'Links texture to musical character/effect.'
-    },
-    qDevices: {
-      A:'Defines device.',
-      M:'Outlines a valid short example.',
-      E:'Explains the device's impact on expectation/momentum.'
-    },
-    qPerf: {
-      A:'Identifies marking(s).',
-      M:'Explains how to play them with evidence.',
-      E:'Analyses effect on listener/ensemble balance.'
-    }
+    qIntervals:{A:'Names quality/quantity of most intervals.', M:'All intervals with workings.', E:'Links dissonance/resolution to effect.'},
+    qTransposition:{A:'Correct direction & interval.', M:'Resulting key & signature correct.', E:'Justifies signature/accidentals & tessitura impact.'},
+    qTonality:{A:'Names plausible key.', M:'Two pieces of evidence (cadence/chords/accidentals).', E:'Notes brief modulation/tonicisation with chord evidence.'}
   };
-  const sp = special[topic]||{};
-  return {
-    A: sp.A || base.A,
-    M: sp.M || base.M,
-    E: sp.E || base.E,
-    flavour: extra
-  };
+  const sp = special[key]||{}; return { A:sp.A||base.A, M:sp.M||base.M, E:sp.E||base.E };
 }
 
 // ===== Renderers =====
 function el(id){ return document.getElementById(id); }
 function renderExam(qs){
-  const out = el('out');
-  out.innerHTML = '';
+  const out = el('out'); out.innerHTML='';
   qs.forEach((q,i)=>{
-    const div = document.createElement('div');
-    div.className = 'qbox';
-    div.innerHTML = `<h3>Q${i+1} [${q.topic}]</h3><div class="mono">${q.stem}</div>`;
+    const div = document.createElement('div'); div.className='qbox';
+    const vfId = `vf-${i+1}`;
+    div.innerHTML = `<h3>Q${i+1} [${q.topic}]</h3><div class="mono">${q.stem}</div><div id="${vfId}"></div>`;
     out.appendChild(div);
+    if(q.render) {
+      try {
+        q.render(vfId);
+      } catch(e) {
+        console.warn('Failed to render notation for Q'+(i+1), e);
+      }
+    }
   });
 }
 function renderSchedule(qs){
-  const sched = el('schedule');
-  sched.innerHTML='';
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `<h2>Assessment Schedule</h2>`;
+  const sched = el('schedule'); sched.innerHTML='';
+  const wrap = document.createElement('div'); wrap.innerHTML = `<h2>Assessment Schedule</h2>`;
+  sched.appendChild(wrap);
   qs.forEach((q,i)=>{
     const s = scheduleFor(q._key);
-    const sec = document.createElement('div');
-    sec.className='qbox';
-    sec.innerHTML = `
-      <h3>Q${i+1} [${q.topic}]</h3>
-      <div class="small"><em>Authenticity flavour:</em> ${s.flavour||'—'}</div>
-      <ul>
-        <li><strong>Achievement:</strong> ${s.A}</li>
-        <li><strong>Merit:</strong> ${s.M}</li>
-        <li><strong>Excellence:</strong> ${s.E}</li>
-      </ul>`;
+    const sec = document.createElement('div'); sec.className='qbox';
+    sec.innerHTML = `<h3>Q${i+1} [${q.topic}]</h3><ul><li><strong>Achievement:</strong> ${s.A}</li><li><strong>Merit:</strong> ${s.M}</li><li><strong>Excellence:</strong> ${s.E}</li></ul>`;
     sched.appendChild(sec);
   });
 }
 
-// ===== Main button wiring =====
+// ===== Main wiring =====
 function buildPack(){
   const topicsSel = el('topics');
   const chosen = topicsSel ? Array.from(topicsSel.selectedOptions).map(o=>o.value) : [];
   const keys = chosen.length ? chosen : TOPIC_KEYS;
   const level = (el('difficulty')?.value || 'A').toUpperCase();
-  const n = Math.min(Math.max(parseInt(el('qty')?.value)||10,1),50);
+  const n = Math.min(Math.max(parseInt(el('qty')?.value)||8,1),30);
   const qs = [];
   for(let i=0;i<n;i++){
     const k = pick(keys);
     const fn = GEN[k];
-    const q = fn(level);
-    q._key = k;
-    qs.push(q);
+    const q = fn(level); q._key = k; qs.push(q);
   }
-  renderExam(qs);
-  renderSchedule(qs);
-  window._lastQs = qs;
+  renderExam(qs); renderSchedule(qs); window._lastQs = qs;
 }
 
 el('gen')?.addEventListener('click', buildPack);
 el('clear')?.addEventListener('click', ()=>{ el('out').innerHTML=''; el('schedule').innerHTML=''; window._lastQs=null; });
 el('print')?.addEventListener('click', ()=>window.print());
 
-// Auto-generate one pack on load for instant UX
+// Auto-generate one pack on load
 buildPack();
 </script>
 
