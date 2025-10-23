@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:corpus": "node scripts/build-corpus.mjs"
+    "build:corpus": "node scripts/build-corpus.mjs",
+    "train:91276": "node scripts/train-91276.mjs"
   },
   "dependencies": {
     "pdf-parse": "^1.1.1"
