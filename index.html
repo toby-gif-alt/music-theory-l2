@@ -124,32 +124,38 @@
     </section>
   </main>
 
-  <script>
+  <script type="module">
     // ---------- Utilities ----------
     const r = (min,max)=>Math.floor(Math.random()*(max-min+1))+min;
     const pick = arr => arr[Math.floor(Math.random()*arr.length)];
     const shuffle = a => a.map(x=>[Math.random(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
     const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
 
-    // ---------- Lexicons (seeded + extendable via text import) ----------
+    // ---------- Load mined data ----------
+    const [banks, patterns] = await Promise.all([
+      fetch('data/banks.json').then(r=>r.json()),
+      fetch('data/patterns.json').then(r=>r.json())
+    ]);
+
+    // ---------- Lexicons (from banks.json) ----------
     const LEX = {
-      intervalsQ:['minor','major','perfect','diminished','augmented'],
-      intervalsN:['2nd','3rd','4th','5th','6th','7th','octave'],
-      devices:[
+      intervalsQ: banks.intervalQualities || ['minor','major','perfect','diminished','augmented'],
+      intervalsN: banks.intervalNumbers || ['2nd','3rd','4th','5th','6th','7th','octave'],
+      devices: banks.devices || [
         ['sequence','repetition of a motif at higher or lower pitch'],
         ['ostinato','repeating a motif many times'],
         ['inversion','turning a motif upside down (intervals invert)'],
         ['augmentation','note values made proportionally longer'],
         ['diminution','note values made proportionally shorter']
       ],
-      perf:[
+      perf: banks.perf || [
         ['staccato','short, detached – brightness / energy'],
         ['tenuto','slightly longer – emphasis on the beat'],
         ['marcato','short and accented – heavy emphasis'],
         ['accent','slightly louder – emphasises syncopation'],
         ['legato','smooth and connected – lyrical flow']
       ],
-      excellencePhrases:[
+      excellencePhrases: banks.excellencePhrases || [
         'creates a sense of unity',
         'adds energy and momentum',
         'centres the harmony around the tonic',
@@ -158,14 +164,14 @@
         'increases intensity towards a climax',
         'clarifies the perceived metre for the listener'
       ],
-      keys:['C','G','D','A','E','B','F#','F','Bb','Eb','Ab','Db'],
-      modes:['major','minor'],
+      keys: banks.keys || ['C','G','D','A','E','B','F#','F','Bb','Eb','Ab','Db'],
+      modes: banks.modes || ['major','minor'],
       modHints:['brief modulation to the dominant','temporary tonicisation of the relative minor','move to the subdominant area'],
       chords:['C','G','F','Dm','Em','Am','E7','A7','D7','G/B','C/E','Bb','Eb','F/A'],
       clefs:['treble','alto','tenor','bass'],
       voices:[['Soprano','higher tessitura'],['Alto','lower female tessitura'],['Tenor','higher male tessitura'],['Bass','lowest male tessitura']],
-      instruments:{ Bb:['Clarinet in Bb','Trumpet in Bb','Soprano Sax in Bb'], Eb:['Alto Sax in Eb','Baritone Sax in Eb'], F:['Horn in F'] },
-      transpo:{ Bb:-2, Eb:-9, F:-7 } // semitone written->concert
+      instruments: banks.instruments || { Bb:['Clarinet in Bb','Trumpet in Bb','Soprano Sax in Bb'], Eb:['Alto Sax in Eb','Baritone Sax in Eb'], F:['Horn in F'] },
+      transpo: banks.transposition || { Bb:-2, Eb:-9, F:-7 } // semitone written->concert
     };
 
     function extendFromText(txt){
@@ -283,8 +289,7 @@ Intervals to identify: ${items.join(', ')}.`;
       const explain = document.getElementById('explain').checked;
       const el = document.createElement('div');
       el.className='qbox';
-      el.innerHTML = `<h3>Q${i+1}</h3><div class="mono">${q.stem.replace(/
-/g,'<br>')}</div>` + (explain?`<div class="answer"><strong>Model guidance</strong>
+      el.innerHTML = `<h3>Q${i+1}</h3><div class="mono">${q.stem.replace(/\n/g,'<br>')}</div>` + (explain?`<div class="answer"><strong>Model guidance</strong>
 ${q.answer}</div>`:'');
       out.appendChild(el);
     }
@@ -308,8 +313,7 @@ ${q.answer}</div>`:'');
 
       printable.hidden=false;
       printable.innerHTML = `<h2>AS91276 – ${topics.length>1?'Mixed topics':topics.map(cap).join(', ')} (${level})</h2>` +
-        qs.map((q,i)=>`<h3>${i+1}. [${cap(q.topic)}]</h3><div class="mono">${q.stem.replace(/
-/g,'<br>')}</div>`).join('');
+        qs.map((q,i)=>`<h3>${i+1}. [${cap(q.topic)}]</h3><div class="mono">${q.stem.replace(/\n/g,'<br>')}</div>`).join('');
 
       return qs;
     }
@@ -335,13 +339,11 @@ ${q.answer}</div>`:'');
     document.getElementById('downloadCsv').addEventListener('click',()=>{
       const rows = [['Number','Question','Model']];
       Array.from(out.querySelectorAll('.qbox')).forEach((el,i)=>{
-        const q = el.querySelector('.mono').innerText.replace(/
-/g,' ');
+        const q = el.querySelector('.mono').innerText.replace(/\n/g,' ');
         const m = (el.querySelector('.answer')||{}).innerText||'';
         rows.push([i+1, '"'+q.replace(/"/g,'""')+'"', '"'+m.replace(/"/g,'""')+'"']);
       });
-      download('as91276_pack.csv', rows.map(r=>r.join(',')).join('
-'));
+      download('as91276_pack.csv', rows.map(r=>r.join(',')).join('\n'));
     });
 
     // Import text to extend lexicon
