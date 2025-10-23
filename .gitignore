@@ -2,16 +2,11 @@
 node_modules/
 package-lock.json
 
-# Generated files
-data/corpus.json
-data/patterns.json
+# Temporary test files
 pack.json
 test-pack.json
-*.json
-!data/banks.json
-!package.json
+test-module.html
 
 # OS files
 .DS_Store
 Thumbs.db
-test-module.html
