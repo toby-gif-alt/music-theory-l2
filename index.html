@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const voice = new VF.Voice({ num_beats: 6, beat_value: 4 }).addTickables(notes);
     const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('6/4');
 
     new VF.Formatter().joinVoices([voice]).format([voice], 480);
     factory.draw();
@@ -438,7 +438,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const voice = new VF.Voice({ num_beats: 6, beat_value: 4 }).addTickables(notes);
     const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('6/4');
     
     new VF.Formatter().joinVoices([voice]).format([voice], 480);
     factory.draw();
