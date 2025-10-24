@@ -231,10 +231,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // --- Engraving builders (no nested backticks) ---
-  // A) Intervals: 6 labelled pairs = 12 eighths -> 12/8
+  // A) Intervals: 6 harmonic (vertical) interval pairs -> 4/4
   function engraveIntervals(containerId){
     const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
-    const score = factory.EasyScore();
     const system = factory.System();
 
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
@@ -244,43 +243,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     const numbers   = banks.intervalNumbers  || ['2nd','3rd','4th','5th','6th','7th','octave'];
     const semisMap  = { '2nd':2,'3rd':4,'4th':5,'5th':7,'6th':9,'7th':11,'octave':12 };
 
-    const tokens = []; // 12 tokens of "/8"
+    const notes = []; // Array of StaveNote objects with multiple keys (harmonic intervals)
     for (let i=1;i<=6;i++){
       const aKey = randNoteTreble(); // e.g. "c/4"
       const q = qualities[Math.floor(Math.random()*qualities.length)];
       const n = numbers[Math.floor(Math.random()*numbers.length)];
       const step = semisMap[n] || 7;
       const adjust = (q==='minor') ? -1 : (q==='augmented') ? +1 : (q==='diminished') ? -1 : 0;
-      const semi = (Math.random()<0.5 ? -1 : 1) * (step + adjust);
+      const semi = step + adjust;
 
-      const aTok = aKey.toUpperCase().replace('/', '') + '/8'; // "C4/8"
-      const to   = semitoneOffset(aKey, semi);                  // {letter,acc,oct}
-      const bTok = toEasyToken(to, 8);                          // "C#4/8" etc
-      tokens.push(aTok, bTok);
+      // Convert to note format for VexFlow
+      const lowerNote = aKey.toUpperCase().replace('/', ''); // "C4"
+      const upperObj = semitoneOffset(aKey, semi);
+      const upperNote = upperObj.letter + (upperObj.acc || '') + upperObj.oct; // "E4"
+      
+      // Create harmonic interval: both notes sounding together
+      const harmonic = new VF.StaveNote({
+        clef: 'treble',
+        keys: [lowerNote, upperNote],
+        duration: 'q'
+      });
+      
+      // Add accidentals if needed
+      if (upperObj.acc) {
+        harmonic.addModifier(new VF.Accidental(upperObj.acc), 1);
+      }
+      
+      colorRed(harmonic);
+      
+      // Add label number
+      const ann = new VF.Annotation(String(i));
+      ann.setFont('Arial', 10);
+      ann.setJustification(HJ.CENTER);
+      ann.setVerticalJustification(VJ.TOP);
+      harmonic.addModifier(ann, 0);
+      
+      notes.push(harmonic);
     }
 
-    const notes = score.notes(tokens.join(', '));
-    notes.forEach((staveNote, idx) => {
-      colorRed(staveNote);
-      if ((idx % 2) === 1) {
-        const ann = new VF.Annotation(String((idx+1)/2));
-        ann.setFont('Arial', 10);
-        ann.setJustification(HJ.CENTER);
-        ann.setVerticalJustification(VJ.TOP);
-        staveNote.addModifier(ann, 0);
-      }
-    });
-    const beams = score.beam(notes);
-    const voice = score.voice(notes, { time: '12/8' });
-
-    // ONE stave only: attach the voice to the same stave we decorate
+    const voice = new VF.Voice({ num_beats: 6, beat_value: 4 }).addTickables(notes);
     const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('12/8');
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
 
+    new VF.Formatter().joinVoices([voice]).format([voice], 480);
     factory.draw();
   }
 
-  // B) Transposition: 8 eighths -> 4/4
+  // B) Transposition: actual musical phrase with varied rhythms -> 4/4
   function engraveTransposition(containerId){
     const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
     const score = factory.EasyScore();
@@ -288,12 +297,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
     const keySig = keys[Math.floor(Math.random()*keys.length)];
-    const pool = ['C4/8','D4/8','E4/8','F4/8','G4/8','A4/8','B4/8','C5/8'];
-    const tokens = Array.from({length:8}, () => pool[Math.floor(Math.random()*pool.length)]).join(', ');
+    
+    // Use a coherent musical phrase with varied rhythms
+    const tokens = 'C4/q, D4/q, E4/q, F4/q, G4/h';
 
     const notes = score.notes(tokens);
     notes.forEach(colorRed);
-    const beams = score.beam(notes);
     const voice = score.voice(notes, { time: '4/4' });
 
     const stave = system.addStave({ voices:[voice] });
@@ -302,7 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     factory.draw();
   }
 
-  // C) Tonality: 16 eighths -> 8/4
+  // C) Tonality: 2-bar phrase with varied rhythms -> 4/4
   function engraveTonality(containerId){
     const factory = new VF.Factory({ renderer: { elementId: containerId, width: 640, height: 180 }});
     const score = factory.EasyScore();
@@ -310,17 +319,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
     const keySig = keys[Math.floor(Math.random()*keys.length)];
-    const bar1 = ['C4/8','D4/8','E4/8','F4/8','G4/8','A4/8','B4/8','C5/8'];
-    const bar2 = ['E5/8','D5/8','C5/8','B4/8','A4/8','G4/8','F4/8','E4/8'];
+    
+    // 2-bar phrase with varied rhythms showing clear cadence
+    const bar1 = ['C4/q','D4/q','E4/q','F4/q'];  // Bar 1: quarter notes
+    const bar2 = ['G4/h','C4/h'];                // Bar 2: half notes (cadence)
     const tokens = bar1.concat(bar2).join(', ');
 
     const notes = score.notes(tokens);
     notes.forEach(colorRed);
-    const beams = score.beam(notes);
-    const voice = score.voice(notes, { time: '8/4' });
+    const voice = score.voice(notes, { time: '4/4' });
 
     const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('8/4');
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
 
     factory.draw();
   }
@@ -382,43 +392,55 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function engraveIntervalsFromTemplate(containerId, tpl){
-    // For intervals, we use the template to generate pairs
+    // For intervals, we use the template to generate harmonic (vertical) pairs
     const VF = window.Vex.Flow;
     const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
-    const score = factory.EasyScore();
     const system = factory.System();
     
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
     const keySig = keys[Math.floor(Math.random()*keys.length)];
     
     const templates = (bank?.templates?.Intervals || []);
-    const tokens = []; // 12 tokens of "/8"
+    const notes = [];
+    
     for (let i=1; i<=6; i++){
       const aKey = randNoteTreble(); // e.g. "c/4"
       const t = templates[Math.floor(Math.random()*templates.length)] || { label:'P5', semi:7 };
-      const semi = (Math.random()<0.5 ? -1 : 1) * (t.semi || 7);
+      const semi = t.semi || 7;
       
-      const aTok = aKey.toUpperCase().replace('/', '') + '/8'; // "C4/8"
-      const to   = semitoneOffset(aKey, semi);                  // {letter,acc,oct}
-      const bTok = toEasyToken(to, 8);                          // "C#4/8" etc
-      tokens.push(aTok, bTok);
+      const lowerNote = aKey.toUpperCase().replace('/', ''); // "C4"
+      const upperObj = semitoneOffset(aKey, semi);
+      const upperNote = upperObj.letter + (upperObj.acc || '') + upperObj.oct; // "E4"
+      
+      // Create harmonic interval: both notes sounding together
+      const harmonic = new VF.StaveNote({
+        clef: 'treble',
+        keys: [lowerNote, upperNote],
+        duration: 'q'
+      });
+      
+      // Add accidentals if needed
+      if (upperObj.acc) {
+        harmonic.addModifier(new VF.Accidental(upperObj.acc), 1);
+      }
+      
+      colorRed(harmonic);
+      
+      // Add label number
+      const ann = new VF.Annotation(String(i));
+      ann.setFont('Arial', 10);
+      ann.setJustification(HJ.CENTER);
+      ann.setVerticalJustification(VJ.TOP);
+      harmonic.addModifier(ann, 0);
+      
+      notes.push(harmonic);
     }
     
-    const notes = score.notes(tokens.join(', '));
-    notes.forEach((staveNote, idx) => {
-      colorRed(staveNote);
-      if ((idx % 2) === 1) {
-        const ann = new VF.Annotation(String((idx+1)/2));
-        ann.setFont('Arial', 10);
-        ann.setJustification(HJ.CENTER);
-        ann.setVerticalJustification(VJ.TOP);
-        staveNote.addModifier(ann, 0);
-      }
-    });
-    const beams = score.beam(notes);
-    const voice = score.voice(notes, { time: '12/8' });
+    const voice = new VF.Voice({ num_beats: 6, beat_value: 4 }).addTickables(notes);
     const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('12/8');
+    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
+    
+    new VF.Formatter().joinVoices([voice]).format([voice], 480);
     factory.draw();
   }
 
@@ -431,12 +453,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
     const keySig = keys[Math.floor(Math.random()*keys.length)];
-    const pool = ['C4/8','D4/8','E4/8','F4/8','G4/8','A4/8','B4/8','C5/8'];
-    const tokens = Array.from({length:8}, () => pool[Math.floor(Math.random()*pool.length)]).join(', ');
+    
+    // Use a coherent musical phrase with varied rhythms from template or default
+    const tokens = (tpl.phrase) ? tpl.phrase.join(', ') : 'C4/q, D4/q, E4/q, F4/q, G4/h';
     
     const notes = score.notes(tokens);
     notes.forEach(colorRed);
-    const beams = score.beam(notes);
     const voice = score.voice(notes, { time: '4/4' });
     const stave = system.addStave({ voices:[voice] });
     stave.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
