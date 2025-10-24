@@ -254,14 +254,14 @@
         "time": "4/4",
         "bars": [
           [
-            "G4/8",
-            "A4/8",
-            "B4/8",
-            "C5/8",
-            "D5/8",
-            "C5/8",
-            "B4/8",
-            "G4/8"
+            "G4/q",
+            "A4/q",
+            "B4/q",
+            "C5/q"
+          ],
+          [
+            "D5/h",
+            "G4/h"
           ]
         ],
         "cadence": "V–I"
@@ -271,14 +271,65 @@
         "time": "4/4",
         "bars": [
           [
-            "F4/8",
-            "G4/8",
-            "A4/8",
-            "Bb4/8",
-            "C5/8",
-            "Bb4/8",
-            "A4/8",
-            "F4/8"
+            "F4/q",
+            "G4/q",
+            "A4/q",
+            "Bb4/q"
+          ],
+          [
+            "C5/h",
+            "F4/h"
+          ]
+        ],
+        "cadence": "V–I"
+      },
+      {
+        "key": "D",
+        "time": "4/4",
+        "bars": [
+          [
+            "D4/q",
+            "F#4/q",
+            "A4/h"
+          ],
+          [
+            "G4/q",
+            "E4/q",
+            "D4/h"
+          ]
+        ],
+        "cadence": "IV–I"
+      },
+      {
+        "key": "C",
+        "time": "4/4",
+        "bars": [
+          [
+            "C4/q",
+            "E4/q",
+            "G4/h"
+          ],
+          [
+            "F4/q",
+            "D4/q",
+            "C4/h"
+          ]
+        ],
+        "cadence": "IV–I"
+      },
+      {
+        "key": "A",
+        "time": "4/4",
+        "bars": [
+          [
+            "A4/q",
+            "C#5/q",
+            "E5/q",
+            "D5/q"
+          ],
+          [
+            "C#5/h",
+            "A4/h"
           ]
         ],
         "cadence": "V–I"
@@ -316,23 +367,70 @@
     ],
     "Intervals": [
       {
+        "label": "M2",
+        "semi": 2
+      },
+      {
+        "label": "m3",
+        "semi": 3
+      },
+      {
         "label": "M3",
         "semi": 4
+      },
+      {
+        "label": "P4",
+        "semi": 5
       },
       {
         "label": "P5",
         "semi": 7
       },
       {
+        "label": "M6",
+        "semi": 9
+      },
+      {
         "label": "m6",
         "semi": 8
+      },
+      {
+        "label": "m7",
+        "semi": 10
+      },
+      {
+        "label": "M7",
+        "semi": 11
+      },
+      {
+        "label": "P8",
+        "semi": 12
       }
     ],
     "Transposition": [
       {
         "inst": "Clarinet in Bb",
         "dir": "to concert",
-        "interval": "M2 down"
+        "interval": "M2 down",
+        "phrase": ["C4/q", "D4/q", "E4/q", "F4/q", "G4/h"]
+      },
+      {
+        "inst": "Alto Saxophone in Eb",
+        "dir": "to concert",
+        "interval": "M6 down",
+        "phrase": ["E4/q", "F4/q", "G4/q", "A4/q", "B4/h"]
+      },
+      {
+        "inst": "Horn in F",
+        "dir": "to concert",
+        "interval": "P5 down",
+        "phrase": ["G4/q", "A4/q", "B4/q", "C5/q", "D5/h"]
+      },
+      {
+        "inst": "Trumpet in Bb",
+        "dir": "from concert",
+        "interval": "M2 up",
+        "phrase": ["C4/q", "D4/q", "E4/h", "C4/h"]
       }
     ]
   },
