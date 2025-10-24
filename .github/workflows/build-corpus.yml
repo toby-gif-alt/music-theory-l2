@@ -1,35 +1,50 @@
-name: Build corpus for Pages
+name: Build 91276 Bank
+
 on:
   push:
-    branches: [ main, master ]
-    paths:
-      - info/**.pdf
-      - scripts/**
-      - data/banks.json
-      - .github/workflows/build-corpus.yml
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  train:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      # Show what is in the repo to catch path issues
+      - name: Show repo tree
+        run: |
+          pwd
+          node -v
+          npm -v
+          ls -la
+          echo "---- info/ ----"
+          ls -la info || true
+
+      # If there is no package-lock.json, npm ci fails. Fall back to npm i.
       - name: Install deps
         run: |
-          npm ci || npm i
-      - name: Build corpus
+          (npm ci --no-audit --no-fund) || npm i --no-audit --no-fund
+
+      # Train the bank (never hard fail on a single bad PDF)
+      - name: Train question bank from /info PDFs
+        run: npm run train:91276
+
+      - name: Show generated data
         run: |
-          node scripts/build-corpus.mjs
-      - name: Commit mined data
+          test -f data/question_bank.json && wc -c data/question_bank.json && head -n 40 data/question_bank.json || echo "question_bank.json missing"
+
+      - name: Commit generated data
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@users.noreply.github.com"
-          git add data/corpus.json data/patterns.json || true
-          git commit -m "chore: update mined corpus/patterns" || echo "no changes"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/question_bank.json
+          git commit -m "chore(data): update 91276 question bank" || echo "no changes"
           git push || true
