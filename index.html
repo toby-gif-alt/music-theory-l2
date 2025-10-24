@@ -231,9 +231,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // --- Engraving builders (no nested backticks) ---
-  // A) Intervals: 6 harmonic (vertical) interval pairs -> 4/4
+  // A) Intervals: 6 harmonic (vertical) interval pairs across 2 bars of 4/4
   function engraveIntervals(containerId){
-    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 640, height: 170 }});
     const system = factory.System();
 
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
@@ -243,7 +243,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const numbers   = banks.intervalNumbers  || ['2nd','3rd','4th','5th','6th','7th','octave'];
     const semisMap  = { '2nd':2,'3rd':4,'4th':5,'5th':7,'6th':9,'7th':11,'octave':12 };
 
-    const notes = []; // Array of StaveNote objects with multiple keys (harmonic intervals)
+    // Create 6 intervals split across 2 bars (4 + 2)
+    const bar1Notes = [];
+    const bar2Notes = [];
+    
     for (let i=1;i<=6;i++){
       const aKey = randNoteTreble(); // e.g. "c/4"
       const q = qualities[Math.floor(Math.random()*qualities.length)];
@@ -278,14 +281,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       ann.setVerticalJustification(VJ.TOP);
       harmonic.addModifier(ann, 0);
       
-      notes.push(harmonic);
+      // Split intervals: first 4 in bar1, last 2 in bar2
+      if (i <= 4) {
+        bar1Notes.push(harmonic);
+      } else {
+        bar2Notes.push(harmonic);
+      }
     }
 
-    const voice = new VF.Voice({ num_beats: 6, beat_value: 4 }).addTickables(notes);
-    const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('6/4');
+    // Add rests to fill bar 2 (needs 4 quarter notes total)
+    bar2Notes.push(new VF.StaveNote({ clef: 'treble', keys: ['b/4'], duration: 'qr' }));
+    bar2Notes.push(new VF.StaveNote({ clef: 'treble', keys: ['b/4'], duration: 'qr' }));
 
-    new VF.Formatter().joinVoices([voice]).format([voice], 480);
+    // Create voices for each bar
+    const voice1 = new VF.Voice({ num_beats: 4, beat_value: 4 }).addTickables(bar1Notes);
+    const voice2 = new VF.Voice({ num_beats: 4, beat_value: 4 }).addTickables(bar2Notes);
+
+    // Create two staves
+    const stave1 = system.addStave({ voices:[voice1] });
+    stave1.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
+    
+    const stave2 = system.addStave({ voices:[voice2] });
+    // No clef/time sig needed on second stave (continues from first)
+
+    new VF.Formatter().joinVoices([voice1]).format([voice1], 280);
+    new VF.Formatter().joinVoices([voice2]).format([voice2], 280);
     factory.draw();
   }
 
@@ -392,16 +412,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function engraveIntervalsFromTemplate(containerId, tpl){
-    // For intervals, we use the template to generate harmonic (vertical) pairs
+    // For intervals, we use the template to generate harmonic (vertical) pairs across 2 bars
     const VF = window.Vex.Flow;
-    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 560, height: 170 }});
+    const factory = new VF.Factory({ renderer: { elementId: containerId, width: 640, height: 170 }});
     const system = factory.System();
     
     const keys = (banks.keys && banks.keys.length) ? banks.keys : ['C'];
     const keySig = keys[Math.floor(Math.random()*keys.length)];
     
     const templates = (bank?.templates?.Intervals || []);
-    const notes = [];
+    
+    // Create 6 intervals split across 2 bars (4 + 2)
+    const bar1Notes = [];
+    const bar2Notes = [];
     
     for (let i=1; i<=6; i++){
       const aKey = randNoteTreble(); // e.g. "c/4"
@@ -433,14 +456,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       ann.setVerticalJustification(VJ.TOP);
       harmonic.addModifier(ann, 0);
       
-      notes.push(harmonic);
+      // Split intervals: first 4 in bar1, last 2 in bar2
+      if (i <= 4) {
+        bar1Notes.push(harmonic);
+      } else {
+        bar2Notes.push(harmonic);
+      }
     }
     
-    const voice = new VF.Voice({ num_beats: 6, beat_value: 4 }).addTickables(notes);
-    const stave = system.addStave({ voices:[voice] });
-    stave.addClef('treble').addKeySignature(keySig).addTimeSignature('6/4');
+    // Add rests to fill bar 2 (needs 4 quarter notes total)
+    bar2Notes.push(new VF.StaveNote({ clef: 'treble', keys: ['b/4'], duration: 'qr' }));
+    bar2Notes.push(new VF.StaveNote({ clef: 'treble', keys: ['b/4'], duration: 'qr' }));
     
-    new VF.Formatter().joinVoices([voice]).format([voice], 480);
+    // Create voices for each bar
+    const voice1 = new VF.Voice({ num_beats: 4, beat_value: 4 }).addTickables(bar1Notes);
+    const voice2 = new VF.Voice({ num_beats: 4, beat_value: 4 }).addTickables(bar2Notes);
+    
+    // Create two staves
+    const stave1 = system.addStave({ voices:[voice1] });
+    stave1.addClef('treble').addKeySignature(keySig).addTimeSignature('4/4');
+    
+    const stave2 = system.addStave({ voices:[voice2] });
+    // No clef/time sig needed on second stave (continues from first)
+    
+    new VF.Formatter().joinVoices([voice1]).format([voice1], 280);
+    new VF.Formatter().joinVoices([voice2]).format([voice2], 280);
     factory.draw();
   }
 
